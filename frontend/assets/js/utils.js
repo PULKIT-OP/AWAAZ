@@ -401,31 +401,79 @@ document.addEventListener("DOMContentLoaded", Lang.init);
 
 // ─── AUTH HELPERS ────────────────────────────────────────────────────────────
 const Auth = {
+  // User session keys
   getToken: () => localStorage.getItem("awaaz_token"),
   getUser: () => {
     const u = localStorage.getItem("awaaz_user");
     return u ? JSON.parse(u) : null;
   },
   isLoggedIn: () => !!localStorage.getItem("awaaz_token"),
+
+  // Admin session keys
+  getAdminToken: () => localStorage.getItem("awaaz_admin_token"),
+  getAdmin: () => {
+    const u = localStorage.getItem("awaaz_admin_user");
+    return u ? JSON.parse(u) : null;
+  },
+  isAdminLoggedIn: () => !!localStorage.getItem("awaaz_admin_token"),
+
+  // Legacy isAdmin check (for backward compatibility)
   isAdmin: () => {
     const u = Auth.getUser();
     return u && u.isAdmin;
   },
-  save: (token, user) => {
+
+  // Save user session (normal user)
+  saveUser: (token, user) => {
     localStorage.setItem("awaaz_token", token);
     localStorage.setItem("awaaz_user", JSON.stringify(user));
   },
-  logout: () => {
+
+  // Save admin session (separate from user)
+  saveAdmin: (token, user) => {
+    localStorage.setItem("awaaz_admin_token", token);
+    localStorage.setItem("awaaz_admin_user", JSON.stringify(user));
+  },
+
+  // Legacy save (for compatibility)
+  save: (token, user) => {
+    Auth.saveUser(token, user);
+  },
+
+  // Logout user only
+  logoutUser: () => {
     localStorage.removeItem("awaaz_token");
     localStorage.removeItem("awaaz_user");
     window.location.href = "/pages/index.html";
   },
+
+  // Logout admin only
+  logoutAdmin: () => {
+    localStorage.removeItem("awaaz_admin_token");
+    localStorage.removeItem("awaaz_admin_user");
+    window.location.href = "/pages/admin.html";
+  },
+
+  // Logout all (complete session clear)
+  logout: () => {
+    localStorage.removeItem("awaaz_token");
+    localStorage.removeItem("awaaz_user");
+    localStorage.removeItem("awaaz_admin_token");
+    localStorage.removeItem("awaaz_admin_user");
+    window.location.href = "/pages/index.html";
+  },
+};
+
+// User logout - visible in header for logged-in users
+const userLogout = () => {
+  Auth.logoutUser();
 };
 
 // ─── API FETCH WRAPPER ────────────────────────────────────────────────────────
 const api = async (endpoint, options = {}) => {
   const headers = { ...options.headers };
-  const token = Auth.getToken();
+  // Check for admin token first (for admin panel API calls), then user token
+  const token = Auth.getAdminToken() || Auth.getToken();
   if (token) headers["Authorization"] = `Bearer ${token}`;
 
   const res = await fetch(`${API_BASE}${endpoint}`, {
@@ -576,7 +624,7 @@ const renderHeader = (activePage = "") => {
             <div class="user-badge-dot"></div>
             <span class="user-badge-id">${user.userId}</span>
           </div>
-          <button class="nav-btn secondary" onclick="Auth.logout()">${i18n("logout")}</button>
+          ${activePage !== "admin" ? `<button class="nav-btn secondary" onclick="userLogout()">${i18n("logout")}</button>` : ""}
         `
             : `
           <a href="/pages/admin.html" class="nav-link ${activePage === "admin" ? "active" : ""}">🔐 ${i18n("admin")}</a>
@@ -739,7 +787,7 @@ const submitAuth = async (mode) => {
       body: JSON.stringify({ userId, password }),
     });
 
-    Auth.save(data.token, data.user);
+    Auth.saveUser(data.token, data.user);
     document.getElementById("auth-modal")?.remove();
     Toast.success("Welcome!", data.user.userId);
 

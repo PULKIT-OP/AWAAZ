@@ -22,13 +22,24 @@
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
   <script src="../assets/js/utils.js"></script>
+
+  <!-- Dispute Detail Modal -->
+  <div class="modal-overlay" id="dispute-detail-modal">
+    <div class="modal" style="max-width: 800px; max-height: 90vh; overflow-y: auto;">
+      <button class="modal-close" onclick="closeDisputeDetail()">×</button>
+      <div id="dispute-detail-content">
+        <!-- Dispute details will be loaded here -->
+      </div>
+    </div>
+  </div>
+
   <script>
     document.addEventListener('DOMContentLoaded', () => {
       renderHeader('admin');
 
-      // If user has valid JWT token and isAdmin flag, attempt to load dashboard
+      // If admin has valid admin token, attempt to load dashboard
       // Backend will verify JWT — if invalid/expired, API calls will fail with 401/403
-      if (Auth.isLoggedIn() && Auth.isAdmin()) {
+      if (Auth.isAdminLoggedIn()) {
         loadAdminDashboard();
       } else {
         showAdminLogin();
@@ -73,7 +84,7 @@
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ userId, password, adminPassword })
         });
-        Auth.save(data.token, data.user);
+        Auth.saveAdmin(data.token, data.user);
         Toast.success('Admin access granted', '');
         setTimeout(() => loadAdminDashboard(), 500);
       } catch (err) {
@@ -88,11 +99,11 @@
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:28px; flex-wrap:wrap; gap:12px;">
           <div>
             <h1 style="font-family:var(--font-mono); font-size:22px; font-weight:700; color:var(--white); margin-bottom:4px;">Admin Panel</h1>
-            <p style="color:var(--text-muted); font-size:13px;">Logged in as: <span style="color:var(--accent);">${Auth.getUser()?.userId}</span></p>
+            <p style="color:var(--text-muted); font-size:13px;">Logged in as: <span style="color:var(--accent);">${Auth.getAdmin()?.userId}</span></p>
           </div>
           <div style="display:flex; gap:8px;">
             <button class="btn btn-secondary" onclick="loadAdminDashboard()" style="font-size:12px; padding:8px 14px;">🔄 Refresh</button>
-            <button class="btn btn-secondary" onclick="adminLogout()" style="font-size:12px; padding:8px 14px; color:var(--accent); border-color:var(--accent);">🚪 Logout</button>
+            <button class="btn btn-secondary" onclick="adminLogout()" style="font-size:12px; padding:8px 14px; color:var(--accent); border-color:var(--accent);">🚪 Admin Logout</button>
           </div>
         </div>
 
@@ -120,6 +131,12 @@
         <div class="detail-section">
           <div class="detail-section-title">Resolution Requests Pending Review</div>
           <div id="pending-list">Loading...</div>
+        </div>
+
+        <!-- Pending Disputes -->
+        <div class="detail-section" style="margin-top:20px;">
+          <div class="detail-section-title" style="margin-bottom:14px;">Pending Disputes for Review</div>
+          <div id="disputes-list" style="display: grid; gap: 12px;">Loading disputes...</div>
         </div>
 
         <!-- All complaints -->
@@ -165,6 +182,7 @@
 
         renderPendingList(pendingData.complaints);
         renderAllList(allData.complaints);
+        renderDisputesList(disputesData.disputes || []);
       } catch (err) {
         // Check if JWT is invalid/expired (401) or user lacks admin permissions (403)
         if (
@@ -204,9 +222,9 @@
             </div>
             <div style="display:flex; gap:8px;">
               <a href="/pages/complaint.html?id=${c.complaintId}" target="_blank" class="btn btn-secondary" style="padding:6px 12px; font-size:11px;">View Full</a>
-              <button class="btn btn-success" style="padding:6px 12px; font-size:11px;" onclick="adminResolve('${c.complaintId}')">✅ Resolve</button>
-              <button class="btn btn-secondary" style="padding:6px 12px; font-size:11px; border-color:var(--accent); color:var(--accent);" onclick="adminReject('${c.complaintId}')">❌ Reject</button>
-              <button class="btn btn-secondary" style="padding:6px 12px; font-size:11px; border-color:var(--accent); color:var(--accent);" onclick="adminDelete('${c.complaintId}')">🗑️ Delete</button>
+              <button class="btn btn-success pending-resolve-btn" data-complaint-id="${c.complaintId}" style="padding:6px 12px; font-size:11px;">✅ Resolve</button>
+              <button class="btn btn-secondary pending-reject-btn" data-complaint-id="${c.complaintId}" style="padding:6px 12px; font-size:11px; border-color:var(--accent); color:var(--accent);">❌ Reject</button>
+              <button class="btn btn-secondary pending-delete-btn" data-complaint-id="${c.complaintId}" style="padding:6px 12px; font-size:11px; border-color:var(--accent); color:var(--accent);">🗑️ Delete</button>
             </div>
           </div>
           ${sanitizedNote ? `
@@ -219,6 +237,17 @@
       `;
       }).join('');
       el.innerHTML = DOMPurify.sanitize(html);
+
+      // Add event listeners AFTER rendering
+      el.querySelectorAll('.pending-resolve-btn').forEach(btn => {
+        btn.addEventListener('click', () => adminResolve(btn.dataset.complaintId));
+      });
+      el.querySelectorAll('.pending-reject-btn').forEach(btn => {
+        btn.addEventListener('click', () => adminReject(btn.dataset.complaintId));
+      });
+      el.querySelectorAll('.pending-delete-btn').forEach(btn => {
+        btn.addEventListener('click', () => adminDelete(btn.dataset.complaintId));
+      });
     };
 
     let allComplaintsData = [];
@@ -308,9 +337,9 @@
                 <td style="font-size:12px; color:var(--text-dim); white-space:nowrap;">${formatDate(c.createdAt)}</td>
                 <td>
                   ${c.status !== 'resolved' ? `
-                    <button class="btn btn-secondary" style="padding:4px 10px; font-size:10px; color:var(--green); border-color:var(--green);" onclick="adminResolve('${c.complaintId}')">Resolve</button>
+                    <button class="btn btn-secondary table-resolve-btn" data-complaint-id="${c.complaintId}" style="padding:4px 10px; font-size:10px; color:var(--green); border-color:var(--green);">Resolve</button>
                   ` : `<span style="font-size:11px; color:var(--green);">✓ Resolved</span>`}
-                  <button class="btn btn-secondary" style="padding:4px 10px; font-size:10px; color:var(--accent); border-color:var(--accent); margin-left:6px;" onclick="adminDelete('${c.complaintId}')">🗑️ Delete</button>
+                  <button class="btn btn-secondary table-delete-btn" data-complaint-id="${c.complaintId}" style="padding:4px 10px; font-size:10px; color:var(--accent); border-color:var(--accent); margin-left:6px;">🗑️ Delete</button>
                 </td>
               </tr>
             `;
@@ -319,6 +348,14 @@
         </table>
       `;
       el.innerHTML = DOMPurify.sanitize(tableHtml);
+
+      // Add event listeners AFTER rendering
+      el.querySelectorAll('.table-resolve-btn').forEach(btn => {
+        btn.addEventListener('click', () => adminResolve(btn.dataset.complaintId));
+      });
+      el.querySelectorAll('.table-delete-btn').forEach(btn => {
+        btn.addEventListener('click', () => adminDelete(btn.dataset.complaintId));
+      });
     };
 
     const adminResolve = async (id) => {
@@ -361,8 +398,201 @@
     };
 
     const adminLogout = () => {
-      // JWT token is cleared via Auth.logout() - real security comes from backend verification
-      Auth.logout();
+      // Admin-specific logout - clears only admin session, keeps user session intact
+      // Only visible in admin panel
+      if (confirm('Are you sure you want to logout from Admin Panel?')) {
+        Auth.logoutAdmin();
+      }
+    };
+
+    // ────── DISPUTE MANAGEMENT ──────────────────────────────────────────────────
+
+    const renderDisputesList = (disputes) => {
+      const el = document.getElementById('disputes-list');
+      if (!disputes || disputes.length === 0) {
+        el.innerHTML = `<p style="color:var(--text-dim); font-size:13px;">✓ No pending disputes to review.</p>`;
+        return;
+      }
+
+      const html = disputes.map(dispute => {
+        const argumentPreview = DOMPurify.sanitize(dispute.argument.substring(0, 100));
+        return `
+        <div data-dispute-id="${dispute._id}" style="background:var(--surface2); border:1px solid rgba(52,152,219,0.3); border-radius:var(--radius); padding:14px; cursor:pointer; transition:all 0.2s;" role="button" tabindex="0" onmouseover="this.style.background='var(--surface3)'" onmouseout="this.style.background='var(--surface2)'">
+          <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px;">
+            <div>
+              <div style="font-family:var(--font-mono); font-size:11px; color:var(--accent); margin-bottom:3px;">Dispute #${dispute._id.substring(0, 8).toUpperCase()}</div>
+              <div style="font-weight:600; color:var(--white); font-size:13px;">Complaint: ${DOMPurify.sanitize(dispute.complaintId)}</div>
+            </div>
+            <div style="background:rgba(52,152,219,0.2); color:#3498db; padding:4px 8px; border-radius:4px; font-size:10px; font-weight:600; text-transform:uppercase;">
+              ⏳ Pending
+            </div>
+          </div>
+          <div style="background:rgba(255,255,255,0.02); padding:10px; border-radius:4px; margin-bottom:8px; border-left:3px solid var(--text-muted);">
+            <div style="font-size:12px; color:var(--text); line-height:1.5;">
+              ${argumentPreview}${dispute.argument.length > 100 ? '...' : ''}
+            </div>
+          </div>
+          <div style="display:flex; justify-content:space-between; font-size:11px; color:var(--text-muted);">
+            <div>Submitted: ${formatDate(dispute.createdAt)}</div>
+            <div>📎 ${dispute.proofs ? dispute.proofs.length : 0} file(s)</div>
+          </div>
+        </div>
+      `;
+      }).join('');
+      el.innerHTML = html;
+
+      // Add event listeners to dispute cards
+      el.querySelectorAll('[data-dispute-id]').forEach(card => {
+        card.addEventListener('click', () => {
+          viewDisputeDetail(card.dataset.disputeId);
+        });
+      });
+    };
+
+    const viewDisputeDetail = async (disputeId) => {
+      try {
+        const data = await api(`/disputes/admin/${disputeId}`);
+        const dispute = data.dispute;
+        const complaint = data.complaint;
+        const sanitizedArgument = DOMPurify.sanitize(dispute.argument);
+        const culpritName = DOMPurify.sanitize(complaint.culpritDesignationOther || complaint.culpritDesignation.replace(/-/g, ' '));
+
+        let html = `
+          <div class="modal-title" style="margin-bottom: 20px;">Review Dispute</div>
+          
+          <div style="background: var(--surface); padding: 14px; border-radius: var(--radius); margin-bottom: 16px; border-left: 3px solid var(--accent2);">
+            <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 4px;">DISPUTE ID</div>
+            <div style="font-family: var(--font-mono); font-weight: 600; color: var(--accent);">#${dispute._id.substring(0, 8).toUpperCase()}</div>
+          </div>
+
+          <div style="background: var(--surface); padding: 14px; border-radius: var(--radius); margin-bottom: 16px;">
+            <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 6px; font-weight: 600; text-transform: uppercase;">📋 Related Complaint</div>
+            <div style="font-size: 13px; margin-bottom: 4px;"><strong>Accused:</strong> ${culpritName}</div>
+            <div><a href="/pages/complaint.html?id=${complaint.complaintId}" target="_blank" style="color: var(--accent); text-decoration: none; font-size: 12px;">View Full Complaint →</a></div>
+          </div>
+
+          <div style="background: var(--surface); padding: 14px; border-radius: var(--radius); margin-bottom: 16px;">
+            <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 8px; font-weight: 600;">🗣️ DISPUTE ARGUMENT</div>
+            <div style="background: rgba(255,255,255,0.02); padding: 12px; border-radius: 4px; border-left: 3px solid var(--text-muted);">
+              <div style="font-size: 13px; color: var(--text); line-height: 1.8;">
+                ${sanitizedArgument}
+              </div>
+            </div>
+          </div>
+
+          ${dispute.proofs && dispute.proofs.length > 0 ? `
+            <div style="background: var(--surface); padding: 14px; border-radius: var(--radius); margin-bottom: 16px;">
+              <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 10px; font-weight: 600;">📎 EVIDENCE (${dispute.proofs.length})</div>
+              <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 8px;">
+                ${dispute.proofs.map(proof => {
+          const isImage = proof.fileType === 'image';
+          return `
+                  <div data-proof-url="${proof.url}" style="background: var(--surface2); border-radius: 4px; padding: 8px; text-align: center; cursor: pointer;" role="button" tabindex="0">
+                    ${isImage ? `<img src="${proof.url}" alt="proof" style="max-height: 80px; border-radius: 3px; object-fit: cover;">` : `<div style="font-size: 24px;">📄</div>`}
+                    <div style="font-size: 10px; color: var(--text-muted); margin-top: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${DOMPurify.sanitize(proof.originalName)}</div>
+                  </div>
+                `;
+        }).join('')}
+              </div>
+            </div>
+          ` : ''}
+
+          <div style="background: var(--green-soft); padding: 14px; border-radius: var(--radius); border: 1px solid rgba(46,204,113,0.3); margin-bottom: 16px;">
+            <div style="font-size: 12px; color: var(--green); font-weight: 600; margin-bottom: 10px;">✓ TAKE ACTION</div>
+            <div class="form-group" style="margin-bottom: 12px;">
+              <label class="form-label" style="font-size: 12px;">Admin Remarks <span class="required">*</span></label>
+              <textarea class="form-textarea" id="review-notes" placeholder="Explain your decision (min 10 characters)" style="font-size: 12px;" rows="2"></textarea>
+              <div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">Required when approving or rejecting disputes</div>
+            </div>
+            <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+              <button class="btn btn-success" style="padding: 8px 14px; font-size: 12px; flex: 1; min-width: 120px;" data-action="verify" data-dispute-id="${dispute._id}">
+                ✓ Approve Dispute
+              </button>
+              <button class="btn" style="padding: 8px 14px; font-size: 12px; flex: 1; min-width: 120px; border: 1px solid var(--accent); color: var(--accent); background: transparent; cursor: pointer;" data-action="reject" data-dispute-id="${dispute._id}">
+                ✗ Reject Dispute
+              </button>
+            </div>
+          </div>
+        `;
+
+        document.getElementById('dispute-detail-content').innerHTML = DOMPurify.sanitize(html);
+
+        // Add click handlers to proof items after rendering
+        if (dispute.proofs && dispute.proofs.length > 0) {
+          setTimeout(() => {
+            document.querySelectorAll('#dispute-detail-content [data-proof-url]').forEach((item) => {
+              item.addEventListener('click', () => {
+                window.open(item.dataset.proofUrl, '_blank');
+              });
+            });
+          }, 100);
+        }
+
+        // Add click handlers to action buttons
+        setTimeout(() => {
+          const verifyBtn = document.querySelector('[data-action="verify"]');
+          const rejectBtn = document.querySelector('[data-action="reject"]');
+
+          if (verifyBtn) {
+            verifyBtn.addEventListener('click', () => verifyDispute(dispute._id));
+          }
+          if (rejectBtn) {
+            rejectBtn.addEventListener('click', () => rejectDispute(dispute._id));
+          }
+        }, 100);
+
+        document.getElementById('dispute-detail-modal').classList.add('open');
+      } catch (err) {
+        Toast.error('Failed', 'Could not load dispute details.');
+        console.error(err);
+      }
+    };
+
+    const verifyDispute = async (disputeId) => {
+      const notes = document.getElementById('review-notes').value.trim();
+
+      if (!notes || notes.length < 10) {
+        Toast.error('Remarks Required', 'Please provide at least 10 characters of remarks.');
+        return;
+      }
+
+      try {
+        await api(`/disputes/admin/${disputeId}/verify`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ reviewNotes: notes })
+        });
+
+        Toast.success('Verified!', 'Dispute has been approved.');
+        closeDisputeDetail();
+        loadAdminDashboard();
+      } catch (err) {
+        Toast.error('Failed', err.message);
+      }
+    };
+
+    const rejectDispute = async (disputeId) => {
+      const notes = document.getElementById('review-notes').value.trim();
+
+      if (!confirm('Reject this dispute? It will not be visible on the complaint.')) return;
+
+      try {
+        await api(`/disputes/admin/${disputeId}/reject`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ reviewNotes: notes })
+        });
+
+        Toast.success('Rejected', 'Dispute has been rejected.');
+        closeDisputeDetail();
+        loadAdminDashboard();
+      } catch (err) {
+        Toast.error('Failed', err.message);
+      }
+    };
+
+    const closeDisputeDetail = () => {
+      document.getElementById('dispute-detail-modal').classList.remove('open');
     };
   </script>
 </body>

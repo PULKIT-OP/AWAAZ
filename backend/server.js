@@ -105,13 +105,13 @@ const PORT = process.env.PORT || 3000;
 mongoose
   .connect(process.env.MONGODB_URI)
   .then(() => {
-    console.log("✅ Connected to MongoDB");
     app.listen(PORT, () => {
-      console.log(`🚀 Awaaz server running on port ${PORT}`);
-      console.log(`📡 API: http://localhost:${PORT}/api`);
+      if (process.env.NODE_ENV !== "production") {
+        console.log(`Server running on port ${PORT}`);
+      }
     });
   })
   .catch((err) => {
-    console.error("❌ MongoDB connection failed:", err.message);
+    console.error("Database connection failed:", err.message);
     process.exit(1);
   });

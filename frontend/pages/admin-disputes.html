@@ -97,7 +97,7 @@
       renderHeader();
 
       // Check admin access
-      if (!Auth.isAdmin()) {
+      if (!Auth.isAdminLoggedIn()) {
         document.body.innerHTML = `
           <div style="display: flex; align-items: center; justify-content: center; height: 100vh;">
             <div style="text-align: center;">
@@ -161,7 +161,7 @@
       const html = disputes.map(dispute => {
         const argumentPreview = DOMPurify.sanitize(dispute.argument.substring(0, 150));
         return `
-        <div class="dispute-card" style="background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 20px; cursor: pointer;" onclick="viewDisputeDetail('${dispute._id}')">
+        <div class="dispute-card" data-dispute-id="${dispute._id}" style="background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 20px; cursor: pointer;" role="button" tabindex="0">
           <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
             <div>
               <div style="font-weight: 600; color: var(--text); font-size: 15px; margin-bottom: 4px;">
@@ -198,7 +198,14 @@
         </div>
       `;
       }).join('');
-      container.innerHTML = DOMPurify.sanitize(html);
+      container.innerHTML = html;
+
+      // Add event listeners to dispute cards
+      document.querySelectorAll('.dispute-card').forEach(card => {
+        card.addEventListener('click', () => {
+          viewDisputeDetail(card.dataset.disputeId);
+        });
+      });
     };
 
     const getStatusColor = (status) => {
@@ -283,11 +290,11 @@
                 ${dispute.proofs.map(proof => {
           const sanitizedName = DOMPurify.sanitize(proof.originalName);
           return proof.fileType === 'image'
-            ? `<div class="proof-item" onclick="window.open('${proof.url}', '_blank')">
+            ? `<div class="proof-item" data-proof-url="${proof.url}" role="button" tabindex="0">
                      <img src="${proof.url}" alt="${sanitizedName}" loading="lazy">
                      <div class="proof-item-name">${sanitizedName}</div>
                    </div>`
-            : `<div class="proof-item" onclick="window.open('${proof.url}', '_blank')">
+            : `<div class="proof-item" data-proof-url="${proof.url}" role="button" tabindex="0">
                      <div class="proof-item-pdf">📄<span style="font-size:11px;color:var(--text-dim);">PDF</span></div>
                      <div class="proof-item-name">${sanitizedName}</div>
                    </div>`
@@ -308,10 +315,10 @@
               </div>
 
               <div style="display: flex; gap: 12px;">
-                <button class="btn btn-success" onclick="verifyDispute('${dispute._id}')">
+                <button class="btn btn-success" data-action="verify" data-dispute-id="${dispute._id}">
                   \u2713 Approve & Verify
                 </button>
-                <button class="btn" style="border: 1px solid var(--accent); color: var(--accent); background: transparent;" onclick="rejectDispute('${dispute._id}')">
+                <button class="btn" style="border: 1px solid var(--accent); color: var(--accent); background: transparent;" data-action="reject" data-dispute-id="${dispute._id}">
                   \u2717 Reject
                 </button>
               </div>
@@ -336,6 +343,32 @@
         `;
 
         document.getElementById('dispute-detail-content').innerHTML = DOMPurify.sanitize(html);
+
+        // Add click handlers to proof items after rendering
+        if (dispute.proofs && dispute.proofs.length > 0) {
+          setTimeout(() => {
+            document.querySelectorAll('.proof-item').forEach((item) => {
+              item.style.cursor = 'pointer';
+              item.addEventListener('click', () => {
+                window.open(item.dataset.proofUrl, '_blank');
+              });
+            });
+          }, 100);
+        }
+
+        // Add click handlers to action buttons
+        setTimeout(() => {
+          const verifyBtn = document.querySelector('[data-action="verify"]');
+          const rejectBtn = document.querySelector('[data-action="reject"]');
+
+          if (verifyBtn) {
+            verifyBtn.addEventListener('click', () => verifyDispute(dispute._id));
+          }
+          if (rejectBtn) {
+            rejectBtn.addEventListener('click', () => rejectDispute(dispute._id));
+          }
+        }, 100);
+
         document.getElementById('dispute-detail-modal').classList.add('open');
       } catch (err) {
         Toast.error('Failed', 'Could not load dispute details.');
