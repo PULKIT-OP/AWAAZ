@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>File a Complaint — AWAAZ</title>
+  <link rel="stylesheet" href="../assets/css/main.css">
+</head>
+
+<body class="form-page">
+
+  <header class="site-header" id="site-header"></header>
+
+  <!-- HERO -->
+  <div class="form-hero">
+    <h1 id="hero-title"></h1>
+    <p id="hero-desc"></p>
+  </div>
+
+  <!-- FORM -->
+  <div class="complaint-form" id="form-container">
+
+    <!-- Not logged in warning -->
+    <div id="auth-required-notice" class="warning-box hidden">
+      <p>
+        <strong id="auth-required-label"></strong><br>
+        <span id="auth-required-desc"></span>
+        <br><br>
+        <button class="btn btn-primary" style="margin-top:8px;" onclick="openAuthModal('register')"><span
+            id="btn-create-account"></span></button>
+        &nbsp;
+        <button class="btn btn-secondary" style="margin-top:8px;" onclick="openAuthModal('login')"><span
+            id="btn-login"></span></button>
+      </p>
+    </div>
+
+    <div id="complaint-form-actual">
+
+      <div class="warning-box">
+        <p id="warning-text"></p>
+      </div>
+
+      <!-- SECTION 1: CULPRIT -->
+      <div class="form-section">
+        <div class="form-section-label" id="section1-label"></div>
+
+        <div class="form-group">
+          <label class="form-label"><span id="label-designation"></span> <span class="required">*</span></label>
+          <select class="form-input" id="culpritDesignation" onchange="toggleCulpritOtherField()">
+            <option value="">-- Select --</option>
+            <option value="doctor">👨‍⚕️ Doctor / Healthcare Professional</option>
+            <option value="politician">🏛️ Politician / Political Leader</option>
+            <option value="teacher">👨‍🏫 Teacher / Educator</option>
+            <option value="police-officer">👮 Police Officer</option>
+            <option value="judge">⚖️ Judge / Judicial Officer</option>
+            <option value="government-official">🏢 Government Official</option>
+            <option value="corporate-executive">💼 Corporate Executive / Boss</option>
+            <option value="healthcare-worker">🏥 Healthcare Worker</option>
+            <option value="business-owner">🏪 Business Owner</option>
+            <option value="landlord">🏠 Landlord / Property Owner</option>
+            <option value="family-member">👨‍👩‍👧 Family Member</option>
+            <option value="other">❓ Other</option>
+          </select>
+          <div class="form-hint" id="hint-designation"></div>
+        </div>
+
+        <div class="form-group hidden" id="culprit-other-field">
+          <label class="form-label"><span id="label-specify-designation"></span> <span class="required">*</span></label>
+          <input class="form-input" id="culpritDesignationOther" type="text"
+            placeholder="e.g., Principal of ABC School, Factory Manager, etc." maxlength="200">
+          <div class="form-hint" id="hint-specify"></div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Designation of Connected People / Accomplices</label>
+          <textarea class="form-textarea" id="connectedPeople" rows="3"
+            placeholder="Enter one Designation per line. Include anyone who was involved or aided the culprit.&#10;E.g.:&#10;Sub Inspector&#10;Judge etc."></textarea>
+          <div class="form-hint">One designation per line.</div>
+        </div>
+      </div>
+
+      <!-- SECTION 2: CATEGORY -->
+      <div class="form-section">
+        <div class="form-section-label" id="section2-label"></div>
+        <div class="form-group">
+          <label class="form-label" id="label-select-all"></label>
+          <div class="tag-selector" id="tag-selector">
+            <!-- Tags rendered by JS -->
+          </div>
+          <input type="hidden" id="selectedTags">
+          <div class="form-group hidden" id="other-complaint-field">
+            <label class="form-label" style="margin-top:16px;"><span id="label-specify-complaint"></span> <span
+                class="required">*</span></label>
+            <textarea class="form-textarea" id="otherComplaintType" rows="3"
+              placeholder="Describe the type of complaint that doesn't fit the above categories..."></textarea>
+          </div>
+        </div>
+      </div>
+
+      <!-- SECTION 3: LOCATION -->
+      <div class="form-section">
+        <div class="form-section-label" id="section3-label"></div>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px;">
+          <div class="form-group">
+            <label class="form-label" id="label-city"></label>
+            <input class="form-input" id="locationCity" type="text" placeholder="e.g. New Delhi">
+          </div>
+          <div class="form-group">
+            <label class="form-label" id="label-state"></label>
+            <input class="form-input" id="locationState" type="text" placeholder="e.g. Delhi">
+          </div>
+        </div>
+      </div>
+
+      <!-- SECTION 4: DESCRIPTION -->
+      <div class="form-section">
+        <div class="form-section-label" id="section4-label"></div>
+        <div class="form-group">
+          <label class="form-label"><span id="label-describe"></span> <span class="required">*</span></label>
+          <textarea class="form-textarea big" id="description"
+            placeholder="Write in detail. What happened, when it happened, how it happened, how it affected you. There is no word limit — tell your story completely."
+            oninput="updateCharCount(this, 'desc-counter')"></textarea>
+          <div style="display:flex; justify-content:space-between; margin-top:5px;">
+            <div class="form-hint" id="hint-description"></div>
+            <div class="char-counter" id="desc-counter">0 characters</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- SECTION 5: LEGAL REFERENCES -->
+      <div class="form-section">
+        <div class="form-section-label" id="section5-label"></div>
+        <div class="form-group">
+          <label class="form-label" id="label-ipc"></label>
+          <textarea class="form-textarea" id="legalReferences" rows="4"
+            placeholder="If you know the relevant IPC section, BNS clause, or legal term, mention it here.&#10;&#10;Examples:&#10;IPC Section 420 (Fraud)&#10;IPC Section 376 (Sexual Assault)&#10;Article 21 (Right to Life)&#10;Prevention of Corruption Act, 1988"></textarea>
+          <div class="form-hint" id="hint-ipc"></div>
+        </div>
+      </div>
+
+      <!-- SECTION 6: PROOFS -->
+      <div class="form-section">
+        <div class="form-section-label" id="section6-label"></div>
+        <div class="form-group">
+          <label class="form-label"><span id="label-upload-proof"></span> <span class="required">*</span></label>
+          <div class="file-drop" id="proof-drop">
+            <input type="file" id="proofFiles" accept="image/*,.pdf" multiple onchange="handleProofFiles(this)">
+            <div class="file-drop-icon">📎</div>
+            <div class="file-drop-text" id="file-drop-text"></div>
+            <div class="file-drop-sub" id="file-drop-sub"></div>
+          </div>
+          <div class="file-preview-list" id="proof-preview-list"></div>
+          <div class="form-hint mt-8" id="hint-upload"></div>
+        </div>
+      </div>
+
+      <!-- SUBMIT -->
+      <div style="border-top: 1px solid var(--border); padding-top: 28px; margin-top: 8px;">
+        <div class="info-box" style="margin-bottom:20px;">
+          <p id="submit-info"></p>
+        </div>
+        <button class="btn btn-primary btn-lg btn-full" id="submit-btn" onclick="submitComplaint()">
+          <span class="spinner" id="submit-spinner"></span>
+          🔔 &nbsp; <span id="btn-submit"></span>
+        </button>
+      </div>
+
+    </div><!-- /#complaint-form-actual -->
+  </div>
+
+  <footer class="site-footer">
+    <div class="footer-inner">
+      <div>
+        <div class="footer-logo">AWAAZ<span>.</span></div>
+        <div class="footer-tagline">"Silence is not golden when injustice screams."</div>
+      </div>
+    </div>
+  </footer>
+
+  <script src="../assets/js/utils.js"></script>
+  <script>
+    const updateFormLabels = () => {
+      // Hero section
+      document.getElementById('hero-title').innerHTML = `${i18n("fileComplaintTitle")} <span>${i18n("fileComplaintTitleSpan")}</span>`;
+      document.getElementById('hero-desc').textContent = i18n("fileComplaintDesc");
+
+      // Auth section
+      document.getElementById('auth-required-label').textContent = i18n("authRequiredTitle");
+      document.getElementById('auth-required-desc').textContent = i18n("authRequiredDesc");
+      document.getElementById('btn-create-account').textContent = i18n("createFreeAccount");
+      document.getElementById('btn-login').textContent = i18n("alreadyHaveAccount");
+
+      // Warning
+      document.getElementById('warning-text').innerHTML = i18n("warningNote");
+
+      // Sections
+      document.getElementById('section1-label').textContent = i18n("section1Title");
+      document.getElementById('section2-label').textContent = i18n("section2Title");
+      document.getElementById('section3-label').textContent = i18n("section3Title");
+      document.getElementById('section4-label').textContent = i18n("section4Title");
+      document.getElementById('section5-label').textContent = i18n("section5Title");
+      document.getElementById('section6-label').textContent = i18n("section6Title");
+
+      // Labels
+      document.getElementById('label-designation').textContent = i18n("culpritDesignationLabel");
+      document.getElementById('hint-designation').textContent = i18n("culpritDesignationHint");
+      document.getElementById('label-specify-designation').textContent = i18n("specifyDesignationLabel");
+      document.getElementById('hint-specify').textContent = i18n("specifyDesignationHint");
+      document.getElementById('label-select-all').textContent = i18n("selectAllTags");
+      document.getElementById('label-specify-complaint').textContent = i18n("specifyComplaintType");
+      document.getElementById('label-city').textContent = i18n("cityLabel");
+      document.getElementById('label-state').textContent = i18n("stateLabel");
+      document.getElementById('label-describe').textContent = i18n("describeLabel");
+      document.getElementById('hint-description').textContent = i18n("describeHint");
+      document.getElementById('label-ipc').textContent = i18n("ipcLabel");
+      document.getElementById('hint-ipc').textContent = i18n("ipcHint");
+      document.getElementById('label-upload-proof').textContent = i18n("uploadProofLabel");
+      document.getElementById('file-drop-text').textContent = i18n("fileDropText");
+      document.getElementById('file-drop-sub').textContent = i18n("fileDropSub");
+      document.getElementById('hint-upload').textContent = i18n("uploadHint");
+      document.getElementById('submit-info').innerHTML = `<strong>${i18n("beforeSubmit")}</strong>`;
+      document.getElementById('btn-submit').textContent = i18n("submitComplaintBtn");
+    };
+
+    let selectedTags = [];
+    let proofFiles = [];
+    let culpritImageFile = null;
+
+    document.addEventListener('DOMContentLoaded', () => {
+      renderHeader('file');
+      updateFormLabels();
+      checkAuthState();
+      renderTagSelector();
+      setupDragDrop();
+    });
+
+    const checkAuthState = () => {
+      const notice = document.getElementById('auth-required-notice');
+      const form = document.getElementById('complaint-form-actual');
+
+      if (!Auth.isLoggedIn()) {
+        notice.classList.remove('hidden');
+        form.classList.add('hidden');
+      } else {
+        notice.classList.add('hidden');
+        form.classList.remove('hidden');
+      }
+    };
+
+    const renderTagSelector = () => {
+      const container = document.getElementById('tag-selector');
+      container.innerHTML = TAGS.map(tag => `
+        <div class="tag-option" data-value="${tag.value}" onclick="toggleTag('${tag.value}', this)">
+          ${tag.label}
+        </div>
+      `).join('');
+    };
+
+    const toggleTag = (value, el) => {
+      const idx = selectedTags.indexOf(value);
+      if (idx === -1) {
+        selectedTags.push(value);
+        el.classList.add('selected');
+      } else {
+        selectedTags.splice(idx, 1);
+        el.classList.remove('selected');
+      }
+      // Show/hide other complaint type field
+      const otherField = document.getElementById('other-complaint-field');
+      if (selectedTags.includes('other')) {
+        otherField.classList.remove('hidden');
+      } else {
+        otherField.classList.add('hidden');
+        document.getElementById('otherComplaintType').value = '';
+      }
+    };
+
+    const toggleCulpritOtherField = () => {
+      const designation = document.getElementById('culpritDesignation').value;
+      const otherField = document.getElementById('culprit-other-field');
+      if (designation === 'other') {
+        otherField.classList.remove('hidden');
+      } else {
+        otherField.classList.add('hidden');
+        document.getElementById('culpritDesignationOther').value = '';
+      }
+    };
+
+    const handleCulpritImage = (input) => {
+      const file = input.files[0];
+      if (!file) return;
+
+      if (file.size > 15 * 1024 * 1024) {
+        Toast.error('File too large', 'Max 15MB for culprit photo.');
+        return;
+      }
+
+      culpritImageFile = file;
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        document.getElementById('culprit-preview-img').src = e.target.result;
+        document.getElementById('culprit-preview-wrap').classList.add('show');
+        document.getElementById('culprit-drop-content').style.display = 'none';
+      };
+      reader.readAsDataURL(file);
+    };
+
+    const removeCulpritImage = (e) => {
+      e.stopPropagation();
+      culpritImageFile = null;
+      document.getElementById('culpritImage').value = '';
+      document.getElementById('culprit-preview-wrap').classList.remove('show');
+      document.getElementById('culprit-drop-content').style.display = '';
+    };
+
+    const handleProofFiles = (input) => {
+      const newFiles = Array.from(input.files);
+      for (const file of newFiles) {
+        if (file.size > 15 * 1024 * 1024) {
+          Toast.error('File too large', `${file.name} exceeds 15MB limit.`);
+          continue;
+        }
+        if (proofFiles.length >= 8) {
+          Toast.warning('Limit reached', 'Maximum 8 proof files allowed.');
+          break;
+        }
+        proofFiles.push(file);
+      }
+      renderProofPreviews();
+    };
+
+    const renderProofPreviews = () => {
+      const list = document.getElementById('proof-preview-list');
+      list.innerHTML = proofFiles.map((f, i) => `
+        <div class="file-preview-item">
+          <span class="file-icon">${f.type === 'application/pdf' ? '📄' : '🖼️'}</span>
+          <span class="file-name">${f.name}</span>
+          <span class="file-size">${formatFileSize(f.size)}</span>
+          <button class="file-remove" onclick="removeProof(${i})">×</button>
+        </div>
+      `).join('');
+    };
+
+    const removeProof = (idx) => {
+      proofFiles.splice(idx, 1);
+      renderProofPreviews();
+    };
+
+    const setupDragDrop = () => {
+      const drop = document.getElementById('proof-drop');
+      drop.addEventListener('dragover', (e) => { e.preventDefault(); drop.classList.add('dragover'); });
+      drop.addEventListener('dragleave', () => drop.classList.remove('dragover'));
+      drop.addEventListener('drop', (e) => {
+        e.preventDefault();
+        drop.classList.remove('dragover');
+        const dt = e.dataTransfer;
+        if (dt.files) handleProofFiles({ files: dt.files });
+      });
+    };
+
+    const updateCharCount = (el, counterId) => {
+      const counter = document.getElementById(counterId);
+      if (counter) counter.textContent = `${el.value.length} characters`;
+    };
+
+    const submitComplaint = async () => {
+      if (!Auth.isLoggedIn()) {
+        openAuthModal('login');
+        return;
+      }
+
+      const culpritDesignation = document.getElementById('culpritDesignation').value.trim();
+      const culpritDesignationOther = document.getElementById('culpritDesignationOther').value.trim();
+      const description = document.getElementById('description').value.trim();
+      const connectedPeople = document.getElementById('connectedPeople').value.trim();
+      const legalReferences = document.getElementById('legalReferences').value.trim();
+      const locationCity = document.getElementById('locationCity').value.trim();
+      const locationState = document.getElementById('locationState').value.trim();
+      const otherComplaintType = document.getElementById('otherComplaintType').value.trim();
+
+      // Validation
+      if (!culpritDesignation) { Toast.error('Required', 'Select the culprit\'s designation.'); return; }
+      if (culpritDesignation === 'other' && !culpritDesignationOther) {
+        Toast.error('Required', 'Specify the custom designation.');
+        return;
+      }
+      if (selectedTags.length === 0) { Toast.error('Required', 'Select at least one complaint type.'); return; }
+      if (selectedTags.includes('other') && !otherComplaintType) {
+        Toast.error('Required', 'Specify the complaint type when selecting "Other".');
+        return;
+      }
+      if (!description || description.length < 50) { Toast.error('Too short', 'Description must be at least 50 characters.'); return; }
+      if (proofFiles.length === 0) { Toast.error('Proof required', 'Upload at least one proof file.'); return; }
+
+      const btn = document.getElementById('submit-btn');
+      const spinner = document.getElementById('submit-spinner');
+      btn.disabled = true;
+      spinner.style.display = 'block';
+      btn.innerHTML = `<span class="spinner" id="submit-spinner" style="display:block"></span> Uploading & Submitting...`;
+
+      try {
+        const formData = new FormData();
+        formData.append('culpritDesignation', culpritDesignation);
+        if (culpritDesignationOther) formData.append('culpritDesignationOther', culpritDesignationOther);
+        formData.append('description', description);
+        formData.append('connectedPeople', connectedPeople);
+        formData.append('legalReferences', legalReferences);
+        formData.append('locationCity', locationCity);
+        formData.append('locationState', locationState);
+        if (otherComplaintType) formData.append('otherComplaintType', otherComplaintType);
+        selectedTags.forEach(t => formData.append('tags', t));
+
+        proofFiles.forEach(f => formData.append('proofs', f));
+
+        const token = Auth.getToken();
+        const res = await fetch(`${API_BASE}/complaints`, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${token}` },
+          body: formData
+        });
+        const data = await res.json();
+
+        if (!res.ok) throw new Error(data.message || 'Submission failed');
+
+        Toast.success('Complaint Filed!', `ID: ${data.complaintId}`);
+        setTimeout(() => {
+          window.location.href = `/pages/complaint.html?id=${data.complaintId}`;
+        }, 1200);
+      } catch (err) {
+        Toast.error('Failed', err.message);
+        btn.disabled = false;
+        btn.innerHTML = `🔔 &nbsp; Submit Complaint Publicly`;
+      }
+    };
+
+    // Re-check auth every time this tab focuses (in case user logged in another tab)
+    window.addEventListener('focus', checkAuthState);
+  </script>
+</body>
+
+</html>

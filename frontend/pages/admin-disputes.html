@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Manage Disputes — AWAAZ Admin</title>
+  <link rel="stylesheet" href="../assets/css/main.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
+</head>
+
+<body>
+
+  <header class="site-header" id="site-header"></header>
+
+  <main style="max-width: 1200px; margin: 0 auto; padding: 32px 24px;">
+    <div
+      style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 32px; flex-wrap: wrap; gap: 16px;">
+      <div>
+        <h1 style="font-family: var(--font-serif); font-size: 36px; font-weight: 700; margin-bottom: 8px;">
+          🔐 Manage Disputes
+        </h1>
+        <p style="color: var(--text-muted); font-size: 14px;">
+          Review and verify dispute responses submitted by individuals mentioned in complaints.
+        </p>
+      </div>
+      <div style="display: flex; gap: 8px;">
+        <button class="btn btn-secondary" onclick="location.href='/pages/admin.html'">
+          ← Back to Admin
+        </button>
+      </div>
+    </div>
+
+    <!-- STATUS TABS -->
+    <div
+      style="display: flex; gap: 12px; margin-bottom: 24px; border-bottom: 1px solid var(--border); flex-wrap: wrap;">
+      <button class="status-tab active" data-status="pending" onclick="filterByStatus('pending', this)">
+        ⏳ Pending (<span id="count-pending">0</span>)
+      </button>
+      <button class="status-tab" data-status="verified" onclick="filterByStatus('verified', this)">
+        ✓ Verified (<span id="count-verified">0</span>)
+      </button>
+      <button class="status-tab" data-status="rejected" onclick="filterByStatus('rejected', this)">
+        ✗ Rejected (<span id="count-rejected">0</span>)
+      </button>
+    </div>
+
+    <!-- DISPUTES LIST -->
+    <div id="disputes-list" style="display: grid; gap: 16px;">
+      <!-- Disputes will be loaded here -->
+    </div>
+
+    <!-- LOADING STATE -->
+    <div id="loading-state" style="text-align: center; padding: 48px 24px;">
+      <div class="skeleton" style="height: 200px; width: 100%; margin-bottom: 16px;"></div>
+      <div class="skeleton" style="height: 200px; width: 100%; margin-bottom: 16px;"></div>
+      <div class="skeleton" style="height: 200px; width: 100%;"></div>
+    </div>
+
+    <!-- EMPTY STATE -->
+    <div id="empty-state" style="text-align: center; padding: 48px 24px; display: none;">
+      <div style="font-size: 48px; margin-bottom: 16px;">✓</div>
+      <h3 style="font-size: 20px; margin-bottom: 8px;">No Disputes</h3>
+      <p style="color: var(--text-muted); margin-bottom: 24px;">There are no disputes in this status.</p>
+    </div>
+  </main>
+
+  <!-- DISPUTE DETAIL MODAL -->
+  <div class="modal-overlay" id="dispute-detail-modal">
+    <div class="modal" style="max-width: 900px; max-height: 90vh; overflow-y: auto;">
+      <button class="modal-close" onclick="closeDisputeDetail()">×</button>
+      <div id="dispute-detail-content">
+        <!-- Dispute details will be loaded here -->
+      </div>
+    </div>
+  </div>
+
+  <footer class="site-footer">
+    <div class="footer-inner">
+      <div>
+        <div class="footer-logo">AWAAZ<span>.</span></div>
+        <div class="footer-tagline">"Silence is not golden when injustice screams."</div>
+      </div>
+    </div>
+  </footer>
+
+  <script src="../assets/js/utils.js"></script>
+  <script>
+    let currentFilter = 'pending';
+    let allDisputes = {
+      pending: [],
+      verified: [],
+      rejected: []
+    };
+
+    document.addEventListener('DOMContentLoaded', () => {
+      renderHeader();
+
+      // Check admin access
+      if (!Auth.isAdmin()) {
+        document.body.innerHTML = `
+          <div style="display: flex; align-items: center; justify-content: center; height: 100vh;">
+            <div style="text-align: center;">
+              <h1 style="font-size: 24px; margin-bottom: 16px;">❌ Access Denied</h1>
+              <p style="color: var(--text-muted); margin-bottom: 24px;">You don't have permission to access this page.</p>
+              <a href="/" class="btn btn-secondary">← Back to Home</a>
+            </div>
+          </div>
+        `;
+        return;
+      }
+
+      loadDisputes();
+    });
+
+    const loadDisputes = async () => {
+      try {
+        document.getElementById('loading-state').style.display = 'block';
+        document.getElementById('disputes-list').innerHTML = '';
+        document.getElementById('empty-state').style.display = 'none';
+
+        // Load all disputes
+        for (const status of ['pending', 'verified', 'rejected']) {
+          try {
+            const data = await api(`/disputes/admin/pending?status=${status}&limit=100`);
+            allDisputes[status] = data.disputes || [];
+            document.getElementById(`count-${status}`).textContent = allDisputes[status].length;
+          } catch (err) {
+            console.error(`Failed to load ${status} disputes:`, err);
+            allDisputes[status] = [];
+          }
+        }
+
+        document.getElementById('loading-state').style.display = 'none';
+        renderDisputes();
+      } catch (err) {
+        console.error('Failed to load disputes:', err);
+        document.getElementById('loading-state').style.display = 'none';
+        Toast.error('Failed', 'Could not load disputes.');
+      }
+    };
+
+    const filterByStatus = (status, elem) => {
+      currentFilter = status;
+      document.querySelectorAll('.status-tab').forEach(tab => tab.classList.remove('active'));
+      elem.classList.add('active');
+      renderDisputes();
+    };
+
+    const renderDisputes = () => {
+      const disputes = allDisputes[currentFilter] || [];
+      const container = document.getElementById('disputes-list');
+
+      if (disputes.length === 0) {
+        container.innerHTML = '';
+        document.getElementById('empty-state').style.display = 'block';
+        return;
+      }
+
+      document.getElementById('empty-state').style.display = 'none';
+      const html = disputes.map(dispute => {
+        const argumentPreview = DOMPurify.sanitize(dispute.argument.substring(0, 150));
+        return `
+        <div class="dispute-card" style="background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 20px; cursor: pointer;" onclick="viewDisputeDetail('${dispute._id}')">
+          <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
+            <div>
+              <div style="font-weight: 600; color: var(--text); font-size: 15px; margin-bottom: 4px;">
+                Dispute #${dispute._id.substring(0, 8).toUpperCase()}
+              </div>
+              <div style="font-size: 13px; color: var(--text-muted);">
+                Complaint: <strong>${dispute.complaintId}</strong>
+              </div>
+            </div>
+            <div style="background: ${getStatusColor(dispute.status)}20; color: ${getStatusColor(dispute.status)}; padding: 6px 12px; border-radius: 4px; font-size: 11px; font-weight: 600; text-transform: uppercase;">
+              ${getStatusLabel(dispute.status)}
+            </div>
+          </div>
+
+          <div style="background: rgba(255,255,255,0.02); padding: 12px; border-radius: 6px; margin-bottom: 12px; border-left: 3px solid var(--text-muted);">
+            <div style="font-size: 13px; color: var(--text); line-height: 1.6; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">
+              ${argumentPreview}${dispute.argument.length > 150 ? '...' : ''}
+            </div>
+          </div>
+
+          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; font-size: 12px; color: var(--text-muted);">
+            <div>
+              Submitted: ${formatDate(dispute.createdAt)}
+            </div>
+            <div>
+              ${dispute.proofs ? dispute.proofs.length : 0} proof file${dispute.proofs && dispute.proofs.length !== 1 ? 's' : ''}
+            </div>
+            ${dispute.status !== 'pending' ? `
+              <div style="color: var(--green);">
+                Reviewed: ${formatDate(dispute.reviewedAt)}
+              </div>
+            ` : ''}
+          </div>
+        </div>
+      `;
+      }).join('');
+      container.innerHTML = DOMPurify.sanitize(html);
+    };
+
+    const getStatusColor = (status) => {
+      switch (status) {
+        case 'pending': return 'var(--accent2)';
+        case 'verified': return 'var(--green)';
+        case 'rejected': return 'var(--accent)';
+        default: return 'var(--text-muted)';
+      }
+    };
+
+    const getStatusLabel = (status) => {
+      switch (status) {
+        case 'pending': return '⏳ Pending';
+        case 'verified': return '✓ Verified';
+        case 'rejected': return '✗ Rejected';
+        default: return status;
+      }
+    };
+
+    const viewDisputeDetail = async (disputeId) => {
+      try {
+        const data = await api(`/disputes/admin/${disputeId}`);
+        const dispute = data.dispute;
+        const complaint = data.complaint;
+        const sanitizedArgument = DOMPurify.sanitize(dispute.argument);
+        const sanitizedReviewNotes = dispute.reviewNotes ? DOMPurify.sanitize(dispute.reviewNotes) : '';
+        const culpritName = DOMPurify.sanitize(complaint.culpritDesignationOther || complaint.culpritDesignation.replace(/-/g, ' '));
+        const complaintDesc = DOMPurify.sanitize(complaint.description.substring(0, 200));
+
+        let html = `
+          <div class="modal-title">Dispute Review</div>
+          
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px; background: var(--surface2); padding: 16px; border-radius: var(--radius-lg);">
+            <div>
+              <div style="font-size: 11px; text-transform: uppercase; color: var(--text-muted); font-weight: 600; margin-bottom: 4px;">Dispute ID</div>
+              <div style="font-weight: 600; color: var(--text);">${dispute._id.substring(0, 8).toUpperCase()}</div>
+            </div>
+            <div>
+              <div style="font-size: 11px; text-transform: uppercase; color: var(--text-muted); font-weight: 600; margin-bottom: 4px;">Related Complaint</div>
+              <div style="font-weight: 600; color: var(--accent);"><a href="/pages/complaint.html?id=${complaint.complaintId}" target="_blank">${complaint.complaintId}</a></div>
+            </div>
+            <div>
+              <div style="font-size: 11px; text-transform: uppercase; color: var(--text-muted); font-weight: 600; margin-bottom: 4px;">Status</div>
+              <div style="background: ${getStatusColor(dispute.status)}20; color: ${getStatusColor(dispute.status)}; padding: 4px 8px; border-radius: 4px; display: inline-block; font-weight: 600; font-size: 12px;">
+                ${getStatusLabel(dispute.status)}
+              </div>
+            </div>
+            <div>
+              <div style="font-size: 11px; text-transform: uppercase; color: var(--text-muted); font-weight: 600; margin-bottom: 4px;">Submitted</div>
+              <div style="font-weight: 600; color: var(--text);">${formatDate(dispute.createdAt)}</div>
+            </div>
+          </div>
+
+          <!-- COMPLAINT INFO -->
+          <div style="background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 16px; margin-bottom: 24px;">
+            <div style="font-weight: 600; margin-bottom: 12px; color: var(--accent);">📋 Related Complaint</div>
+            <div style="font-size: 13px;">
+              <strong>Accused:</strong> ${culpritName}
+              ${complaint.culpritName ? ` (${DOMPurify.sanitize(complaint.culpritName)})` : ''}
+            </div>
+            <div style="font-size: 13px; color: var(--text-muted); margin-top: 8px;">
+              ${complaintDesc}...
+            </div>
+          </div>
+
+          <!-- DISPUTE ARGUMENT -->
+          <div style="background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 16px; margin-bottom: 24px;">
+            <div style="font-weight: 600; margin-bottom: 12px;">🗣️ Dispute Argument</div>
+            <div style="background: rgba(255,255,255,0.02); padding: 12px; border-radius: 6px; border-left: 3px solid var(--text-muted);">
+              <div style="font-size: 13px; color: var(--text); line-height: 1.8;">
+                ${sanitizedArgument}
+              </div>
+            </div>
+          </div>
+
+          <!-- PROOF FILES -->
+          ${dispute.proofs && dispute.proofs.length > 0 ? `
+            <div style="background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 16px; margin-bottom: 24px;">
+              <div style="font-weight: 600; margin-bottom: 12px;">📎 Evidence Files (${dispute.proofs.length})</div>
+              <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 12px;">
+                ${dispute.proofs.map(proof => {
+          const sanitizedName = DOMPurify.sanitize(proof.originalName);
+          return proof.fileType === 'image'
+            ? `<div class="proof-item" onclick="window.open('${proof.url}', '_blank')">
+                     <img src="${proof.url}" alt="${sanitizedName}" loading="lazy">
+                     <div class="proof-item-name">${sanitizedName}</div>
+                   </div>`
+            : `<div class="proof-item" onclick="window.open('${proof.url}', '_blank')">
+                     <div class="proof-item-pdf">📄<span style="font-size:11px;color:var(--text-dim);">PDF</span></div>
+                     <div class="proof-item-name">${sanitizedName}</div>
+                   </div>`
+        }).join('')}
+              </div>
+            </div>
+          ` : ''}
+
+          <!-- ADMIN REVIEW SECTION -->
+          ${dispute.status === 'pending' ? `
+            <div style="background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 16px; margin-bottom: 24px;">
+              <div style="font-weight: 600; margin-bottom: 12px; color: var(--green);">\u2713 Admin Review</div>
+              
+              <div class="form-group">
+                <label class="form-label">Admin Remarks <span class="required">*</span></label>
+                <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 8px;">Required: Explain your decision (min 10 characters) when approving this dispute.</div>
+                <textarea class="form-textarea" id="review-notes" rows="3" placeholder="Explain why you're approving this dispute (e.g., 'Evidence is credible and supports the claim')"></textarea>
+              </div>
+
+              <div style="display: flex; gap: 12px;">
+                <button class="btn btn-success" onclick="verifyDispute('${dispute._id}')">
+                  \u2713 Approve & Verify
+                </button>
+                <button class="btn" style="border: 1px solid var(--accent); color: var(--accent); background: transparent;" onclick="rejectDispute('${dispute._id}')">
+                  \u2717 Reject
+                </button>
+              </div>
+            </div>
+          ` : dispute.status === 'verified' ? `
+            <div style="background: var(--green-soft); border: 1px solid rgba(46,204,113,0.3); border-radius: var(--radius-lg); padding: 16px; margin-bottom: 24px;">
+              <div style="font-weight: 600; margin-bottom: 8px; color: var(--green);">\u2713 Verified by Admin</div>
+              <div style="font-size: 13px; color: var(--text-muted);">
+                Reviewed on ${formatDate(dispute.reviewedAt)}
+                ${sanitizedReviewNotes ? `<br><br><strong>Admin Notes:</strong><br>${sanitizedReviewNotes}` : ''}
+              </div>
+            </div>
+          ` : `
+            <div style="background: var(--accent-soft); border: 1px solid rgba(255,60,47,0.3); border-radius: var(--radius-lg); padding: 16px; margin-bottom: 24px;">
+              <div style="font-weight: 600; margin-bottom: 8px; color: var(--accent);">\u2717 Rejected by Admin</div>
+              <div style="font-size: 13px; color: var(--text-muted);">
+                Reviewed on ${formatDate(dispute.reviewedAt)}
+                ${sanitizedReviewNotes ? `<br><br><strong>Reason:</strong><br>${sanitizedReviewNotes}` : ''}
+              </div>
+            </div>
+          `}
+        `;
+
+        document.getElementById('dispute-detail-content').innerHTML = DOMPurify.sanitize(html);
+        document.getElementById('dispute-detail-modal').classList.add('open');
+      } catch (err) {
+        Toast.error('Failed', 'Could not load dispute details.');
+        console.error(err);
+      }
+    };
+
+    const verifyDispute = async (disputeId) => {
+      const notes = document.getElementById('review-notes').value.trim();
+
+      // Make remarks mandatory for verification
+      if (!notes || notes.length < 10) {
+        Toast.error('Remarks Required', 'Please provide at least 10 characters of remarks before approving.');
+        return;
+      }
+
+      try {
+        await api(`/disputes/admin/${disputeId}/verify`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ reviewNotes: notes })
+        });
+
+        Toast.success('Verified!', 'Dispute has been approved and verified.');
+        closeDisputeDetail();
+        loadDisputes();
+      } catch (err) {
+        Toast.error('Failed', err.message);
+      }
+    };
+
+    const rejectDispute = async (disputeId) => {
+      const notes = document.getElementById('review-notes').value.trim();
+
+      if (!confirm('Reject this dispute? It will not be visible on the complaint.')) return;
+
+      try {
+        await api(`/disputes/admin/${disputeId}/reject`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ reviewNotes: notes })
+        });
+
+        Toast.success('Rejected', 'Dispute has been rejected.');
+        closeDisputeDetail();
+        loadDisputes();
+      } catch (err) {
+        Toast.error('Failed', err.message);
+      }
+    };
+
+    const closeDisputeDetail = () => {
+      document.getElementById('dispute-detail-modal').classList.remove('open');
+    };
+
+    const escapeHtml = (text) => {
+      if (!text) return '';
+      return text
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/\n/g, '<br>');
+    };
+
+    // Close modal on overlay click
+    document.getElementById('dispute-detail-modal').addEventListener('click', (e) => {
+      if (e.target === document.getElementById('dispute-detail-modal')) {
+        closeDisputeDetail();
+      }
+    });
+  </script>
+</body>
+
+</html>

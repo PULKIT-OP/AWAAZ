@@ -1,0 +1,703 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Complaint — AWAAZ</title>
+  <link rel="stylesheet" href="../assets/css/main.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
+</head>
+
+<body>
+
+  <header class="site-header" id="site-header"></header>
+
+  <main>
+    <div class="complaint-detail" id="complaint-detail">
+      <!-- Skeleton -->
+      <div class="skeleton-card" style="height:200px; margin-bottom:20px;">
+        <div class="skeleton" style="height:100%; width:100%;"></div>
+      </div>
+      <div class="skeleton-card" style="height:300px;">
+        <div class="skeleton" style="height:100%; width:100%;"></div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Resolution Request Modal -->
+  <div class="modal-overlay" id="resolution-modal">
+    <div class="modal">
+      <button class="modal-close"
+        onclick="document.getElementById('resolution-modal').classList.remove('open')">×</button>
+      <div class="modal-title">Request Resolution</div>
+      <div class="modal-sub">Explain how you received justice. The admin will verify and mark the complaint resolved.
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">How did you get justice? <span class="required">*</span></label>
+        <textarea class="form-textarea" id="res-note" rows="5"
+          placeholder="Describe what happened — did the authorities act? Did the culprit face consequences? Include any relevant details."></textarea>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Upload Proof (optional)</label>
+        <div class="file-drop" onclick="document.getElementById('res-proof-file').click()">
+          <input type="file" id="res-proof-file" accept="image/*,.pdf" style="display:none">
+          <div class="file-drop-icon">📎</div>
+          <div class="file-drop-text">Upload supporting document</div>
+          <div class="file-drop-sub">Court order, FIR copy, news article, etc.</div>
+        </div>
+        <div id="res-file-preview" style="margin-top:8px;"></div>
+      </div>
+
+      <button class="btn btn-success btn-full" id="res-submit-btn" onclick="submitResolutionRequest()">
+        Submit Resolution Request
+      </button>
+    </div>
+  </div>
+
+  <!-- Dispute Submit Modal -->
+  <div class="modal-overlay" id="dispute-modal">
+    <div class="modal" style="max-height: 90vh; overflow-y: auto;">
+      <button class="modal-close" onclick="document.getElementById('dispute-modal').classList.remove('open')">×</button>
+      <div class="modal-title">Submit a Dispute / Response</div>
+      <div class="modal-sub">If you've been blamed in this complaint, submit your response with evidence to defend
+        yourself. The admin will review your argument before it's posted.
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Your Argument <span class="required">*</span></label>
+        <textarea class="form-textarea" id="dispute-argument" rows="6"
+          placeholder="Explain your side of the story. Provide context, facts, and any relevant details to counter the complaint. (Minimum 50 characters)"></textarea>
+        <div style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">
+          <span id="dispute-char-count">0</span> / 5000 characters
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Evidence / Proof Files <span class="required">*</span></label>
+        <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 8px;">
+          Upload at least one file (images, PDFs, documents, etc.) to support your argument.
+        </div>
+        <div class="file-drop" id="dispute-file-drop" onclick="document.getElementById('dispute-proof-files').click()">
+          <input type="file" id="dispute-proof-files" accept="image/*,.pdf" multiple style="display:none">
+          <div class="file-drop-icon">📎</div>
+          <div class="file-drop-text">Upload your evidence</div>
+          <div class="file-drop-sub">Images, PDFs, documents (up to 5 files, 15MB each)</div>
+        </div>
+        <div id="dispute-files-preview" style="margin-top: 12px; display: flex; flex-wrap: wrap; gap: 8px;"></div>
+      </div>
+
+      <button class="btn btn-success btn-full" id="dispute-submit-btn" onclick="submitDispute()">
+        🔐 Submit Dispute for Admin Review
+      </button>
+    </div>
+  </div>
+
+  <footer class="site-footer">
+    <div class="footer-inner">
+      <div>
+        <div class="footer-logo">AWAAZ<span>.</span></div>
+        <div class="footer-tagline">"Silence is not golden when injustice screams."</div>
+      </div>
+      <div class="footer-note">
+        <a href="/pages/index.html" style="color:var(--text-muted)">← Back to all complaints</a>
+      </div>
+    </div>
+  </footer>
+
+  <script src="../assets/js/utils.js"></script>
+  <script>
+    let complaintData = null;
+    let complaintId = null;
+    let isOwner = false;
+    let fromDisputes = false;
+
+    document.addEventListener('DOMContentLoaded', () => {
+      renderHeader();
+      const params = new URLSearchParams(window.location.search);
+      complaintId = params.get('id');
+      fromDisputes = params.get('from') === 'disputes';
+
+      if (!complaintId) {
+        window.location.href = '/pages/index.html';
+        return;
+      }
+
+      loadComplaint();
+
+      // Resolution proof file preview
+      document.getElementById('res-proof-file').addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        document.getElementById('res-file-preview').innerHTML = `
+          <div class="file-preview-item">
+            <span class="file-icon">${file.type === 'application/pdf' ? '📄' : '🖼️'}</span>
+            <span class="file-name">${file.name}</span>
+            <span class="file-size">${formatFileSize(file.size)}</span>
+          </div>
+        `;
+      });
+    });
+
+    const loadComplaint = async () => {
+      try {
+        console.log('Loading complaint with ID:', complaintId);
+        const data = await api(`/complaints/${complaintId}`);
+        console.log('Complaint loaded:', data);
+        complaintData = data.complaint;
+        const culpritDisplay = complaintData.culpritDesignationOther || complaintData.culpritDesignation.replace(/-/g, ' ').toUpperCase();
+        document.title = `${culpritDisplay} — AWAAZ`;
+
+        // Check if this user is the owner (by checking my-complaints)
+        if (Auth.isLoggedIn()) {
+          try {
+            const mine = await api('/complaints/user/my-complaints');
+            isOwner = mine.complaints.some(c => c.complaintId === complaintId);
+          } catch (e) { isOwner = false; }
+        }
+
+        renderComplaint(complaintData);
+        loadDisputes(); // Load disputes for this complaint
+      } catch (err) {
+        console.error('Error loading complaint:', complaintId, err);
+        document.getElementById('complaint-detail').innerHTML = `
+          <div class="empty-state">
+            <div class="empty-state-icon">🔍</div>
+            <h3>Complaint Not Found</h3>
+            <p style="color:var(--text-muted); font-size:12px; margin-bottom:12px;">Complaint ID: ${complaintId}</p>
+            <p>This complaint ID doesn't exist or was removed.</p>
+            <br>
+            <a href="/pages/index.html" class="btn btn-secondary">← Back to Home</a>
+          </div>
+        `;
+      }
+    };
+
+    const renderComplaint = (c) => {
+      const currentUser = Auth.getUser();
+      const isOwner = currentUser && currentUser.userId === c.filedBy;
+      const isAdmin = Auth.isAdmin();
+      const isOwnerView = false;
+
+      const detail = document.getElementById('complaint-detail');
+      const culpritName = DOMPurify.sanitize(c.culpritDesignationOther || c.culpritDesignation.replace(/-/g, ' ').toUpperCase());
+      const description = DOMPurify.sanitize(c.description);
+      const legalReferences = c.legalReferences ? DOMPurify.sanitize(c.legalReferences) : '';
+      const connectedPeople = c.connectedPeople && c.connectedPeople.length > 0 ? DOMPurify.sanitize(c.connectedPeople.join(', ')) : '';
+      const city = c.location?.city ? DOMPurify.sanitize(c.location.city) : '';
+      const state = c.location?.state ? DOMPurify.sanitize(c.location.state) : '';
+      const resolutionNote = c.resolutionRequest?.proofNote ? DOMPurify.sanitize(c.resolutionRequest.proofNote) : '';
+      const resolvedNote = c.resolvedNote ? DOMPurify.sanitize(c.resolvedNote) : '';
+
+      detail.innerHTML = `
+        <!-- Back link -->
+        <div style="margin-bottom:16px;">
+          <a href="${fromDisputes ? '/pages/my-complaints.html?tab=disputes' : '/pages/index.html'}" style="color:var(--text-muted); font-size:13px; font-family:var(--font-mono);">← ${fromDisputes ? 'Back to My Disputes' : 'All Complaints'}</a>
+        </div>
+
+        <!-- Resolved banner if applicable -->
+        ${c.status === 'resolved' ? `
+          <div class="resolved-banner">
+            <div class="resolved-icon">✅</div>
+            <div class="resolved-text">
+              <h3>JUSTICE SERVED — RESOLVED</h3>
+              <p>This complaint has been marked resolved on ${formatDate(c.resolvedAt)}. ${resolvedNote}</p>
+            </div>
+          </div>
+        ` : ''}
+
+        ${c.status === 'resolution-requested' ? `
+          <div style="background:var(--accent2-soft); border:1px solid rgba(245,166,35,0.3); border-radius:var(--radius-lg); padding:16px 20px; margin-bottom:20px; display:flex; gap:12px; align-items:center;">
+            <span style="font-size:20px;">⏳</span>
+            <div>
+              <div style="font-family:var(--font-mono); font-size:12px; color:var(--accent2); font-weight:700;">RESOLUTION REVIEW PENDING</div>
+              <div style="font-size:13px; color:var(--text-muted);">The complainant has requested resolution. Admin is reviewing.</div>
+            </div>
+          </div>
+        ` : ''}
+
+        <!-- CULPRIT BANNER -->
+        <div class="complaint-banner">
+          ${c.culpritImage
+          ? `<img class="culprit-big-img" src="${c.culpritImage.url}" alt="Culprit">`
+          : `<div class="culprit-big-placeholder">👤</div>`
+        }
+          <div class="complaint-banner-info">
+            <div class="complaint-id-badge">COMPLAINT ID: ${c.complaintId}</div>
+            <div class="complaint-culprit-name">${culpritName}</div>
+            ${connectedPeople ? `
+              <div class="complaint-connected">
+                <strong>Also involved:</strong> ${connectedPeople}
+              </div>
+            ` : ''}
+            <div class="card-tags" style="padding:0 0 12px 0;">
+              ${(c.tags || []).map(tag => `<span class="tag-pill ${tag}">${tagLabel(tag)}</span>`).join('')}
+            </div>
+            <div class="meta-row">
+              <span class="meta-item">📅 Filed on ${formatDate(c.createdAt)}</span>
+              ${city ? `<span class="meta-item">📍 ${city}${state ? ', ' + state : ''}</span>` : ''}
+              <span class="meta-item">👁 ${c.views || 0} views</span>
+              <span class="status-badge ${c.status}" style="margin-left:auto;">${c.status === 'resolved' ? 'RESOLVED' :
+          c.status === 'resolution-requested' ? 'PENDING REVIEW' : 'ACTIVE'
+        }</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- DESCRIPTION -->
+        <div class="detail-section">
+          <div class="detail-section-title">Statement / Complaint</div>
+          <div class="description-text">${description}</div>
+        </div>
+
+        <!-- LEGAL REFERENCES -->
+        ${legalReferences ? `
+          <div class="detail-section">
+            <div class="detail-section-title">Legal References</div>
+            <div class="legal-ref">${legalReferences}</div>
+          </div>
+        ` : ''}
+
+        <!-- PROOFS -->
+        <div class="detail-section">
+          <div class="detail-section-title">Evidence & Proofs (${c.proofs.length} file${c.proofs.length !== 1 ? 's' : ''})</div>
+          <div class="proofs-grid">
+            ${c.proofs.map(proof => proof.fileType === 'image'
+          ? `<div class="proof-item" onclick="window.open('${proof.url}', '_blank')">
+                  <img src="${proof.url}" alt="${DOMPurify.sanitize(proof.originalName)}" loading="lazy">
+                  <div class="proof-item-name">${DOMPurify.sanitize(proof.originalName)}</div>
+                </div>`
+          : `<div class="proof-item" onclick="window.open('${proof.url}', '_blank')">
+                  <div class="proof-item-pdf">📄<span style="font-size:11px;color:var(--text-dim);">PDF</span></div>
+                  <div class="proof-item-name">${DOMPurify.sanitize(proof.originalName)}</div>
+                </div>`
+        ).join('')}
+          </div>
+        </div>
+
+        <!-- DISPUTES SECTION -->
+        <div id="disputes-container">
+          <!-- Disputes will be loaded here -->
+        </div>
+
+        <!-- RESOLUTION REQUEST INFO (if already resolved and note exists) -->
+        ${c.status === 'resolved' && resolutionNote ? `
+          <div class="detail-section">
+            <div class="detail-section-title">How Justice Was Served</div>
+            <div class="description-text" style="font-size:14px;">${resolutionNote}</div>
+          </div>
+        ` : ''}
+
+        <!-- ACTION BUTTONS -->
+        ${renderActionButtons(c)}
+
+        <!-- Share -->
+        <div style="margin-top:24px; text-align:center;">
+          <button class="btn btn-secondary" onclick="copyLink()" style="font-size:12px; padding:8px 16px;">
+            🔗 Copy Link to this Complaint
+          </button>
+        </div>
+      `;
+    };
+
+    const renderActionButtons = (c) => {
+      const user = Auth.getUser();
+      const isAdminUser = Auth.isAdmin();
+
+      let html = '';
+
+      // Owner: request resolution (NOT for admins viewing)
+      if (isOwner && c.status === 'active' && !isAdminUser) {
+        html += `
+          <div class="detail-section" style="border-color:rgba(46,204,113,0.3); background:var(--green-soft);">
+            <div class="detail-section-title" style="color:var(--green);">Your Complaint</div>
+            <p style="font-size:13px; color:var(--text-muted); margin-bottom:14px;">
+              Did you receive justice? Request to mark this complaint as resolved. An admin will review your request and confirm.
+            </p>
+            <button class="btn btn-success" onclick="openResolutionModal()">
+              ✅ I Got Justice — Request Resolution
+            </button>
+          </div>
+        `;
+      }
+
+      if (isOwner && c.status === 'resolution-requested' && !isAdminUser) {
+        html += `
+          <div class="detail-section" style="border-color:rgba(245,166,35,0.3); background:var(--accent2-soft);">
+            <div class="detail-section-title" style="color:var(--accent2);">Your Complaint</div>
+            <p style="font-size:13px; color:var(--text-muted);">
+              Your resolution request is under admin review. You'll see the status updated here once reviewed.
+            </p>
+          </div>
+        `;
+      }
+
+      // Any logged-in user: submit dispute button (NOT admins, and NOT the complaint owner)
+      if (Auth.isLoggedIn() && !isOwner && !isAdminUser) {
+        html += `
+          <div class="detail-section" style="border-color:rgba(52,152,219,0.3); background:rgba(52,152,219,0.08);">
+            <div class="detail-section-title" style="color:#3498db;">Submit a Dispute</div>
+            <p style="font-size:13px; color:var(--text-muted); margin-bottom:14px;">
+              If you've been mentioned in this complaint, submit your response with evidence to defend yourself. Your dispute will be reviewed by admins before being posted.
+            </p>
+            <button class="btn" onclick="openDisputeModal()" style="background: #3498db; color: white; border: none;">
+              🔐 Submit Dispute / Response
+            </button>
+          </div>
+        `;
+      }
+
+      if (Auth.isLoggedIn() && !isOwner) {
+        html += `
+          <div style="font-size:12px; background:rgba(52,152,219,0.1); border:1px solid rgba(52,152,219,0.3); border-radius:var(--radius); padding:10px 12px; margin-top:12px; color:var(--text-muted);">
+            <strong style="color:#3498db;">ℹ️ What happens next?</strong><br>
+            After you submit your dispute, an admin will review it and verify the content. Only verified disputes will be visible to the public on this complaint page.
+          </div>
+        `;
+      }
+
+      // Admin controls
+      if (isAdminUser && c.status !== 'resolved') {
+        const complaintNoteSanitized = c.resolutionRequest?.proofNote ? DOMPurify.sanitize(c.resolutionRequest.proofNote) : 'No note provided';
+        html += `
+          <div class="detail-section" style="border-color: rgba(46,204,113,0.3); background: var(--green-soft);">
+            <div class="detail-section-title" style="color:var(--green);">Admin Actions</div>
+            <div style="display:flex; gap:12px; flex-wrap:wrap;">
+              ${c.status === 'resolution-requested' ? `
+                <button class="btn btn-success" onclick="adminResolve('${c.complaintId}')">
+                  ✅ Mark as Resolved
+                </button>
+                <button class="btn btn-secondary" style="border-color:var(--accent); color:var(--accent);" onclick="adminReject('${c.complaintId}')">
+                  ❌ Reject Resolution Request
+                </button>
+              ` : `
+                <button class="btn btn-success" onclick="adminResolve('${c.complaintId}')">
+                  ✅ Force Mark as Resolved
+                </button>
+              `}
+            </div>
+            ${c.status === 'resolution-requested' ? `
+              <div style="margin-top:14px; padding:12px; background:var(--surface); border-radius:var(--radius); font-size:13px; color:var(--text-muted);">
+                <strong style="color:var(--accent2);">Complainant's note:</strong><br><br>
+                ${complaintNoteSanitized}
+                ${c.resolutionRequest?.proofFile ? `<br><br><a href="${c.resolutionRequest.proofFile.url}" target="_blank" class="btn btn-secondary" style="font-size:11px; padding:5px 12px; display:inline-flex;">📎 View Proof Document</a>` : ''}
+              </div>
+            ` : ''}
+          </div>
+        `;
+      }
+
+      return html;
+    };
+
+    // Admin functions - check via my-complaints ownership
+    const adminResolve = async (id) => {
+      const note = prompt('Admin note (optional):') || 'Marked resolved by admin.';
+      try {
+        await api(`/complaints/${id}/resolve`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ note })
+        });
+        Toast.success('Resolved', 'Complaint marked as resolved.');
+        setTimeout(() => location.reload(), 1000);
+      } catch (err) {
+        Toast.error('Failed', err.message);
+      }
+    };
+
+    const adminReject = async (id) => {
+      if (!confirm('Reject this resolution request?')) return;
+      try {
+        await api(`/complaints/${id}/reject-resolution`, { method: 'PATCH' });
+        Toast.success('Rejected', 'Resolution request rejected.');
+        setTimeout(() => location.reload(), 1000);
+      } catch (err) {
+        Toast.error('Failed', err.message);
+      }
+    };
+
+    const openResolutionModal = () => {
+      if (!Auth.isLoggedIn()) { openAuthModal('login'); return; }
+      document.getElementById('resolution-modal').classList.add('open');
+    };
+
+    const submitResolutionRequest = async () => {
+      const note = document.getElementById('res-note').value.trim();
+      const file = document.getElementById('res-proof-file').files[0];
+      const btn = document.getElementById('res-submit-btn');
+
+      if (!note || note.length < 20) {
+        Toast.error('Too short', 'Please explain in at least 20 characters.');
+        return;
+      }
+
+      btn.disabled = true;
+      btn.textContent = 'Submitting...';
+
+      try {
+        const formData = new FormData();
+        formData.append('proofNote', note);
+        if (file) formData.append('resolutionProof', file);
+
+        const token = Auth.getToken();
+        const res = await fetch(`${API_BASE}/complaints/${complaintId}/request-resolution`, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${token}` },
+          body: formData
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.message);
+
+        document.getElementById('resolution-modal').classList.remove('open');
+        Toast.success('Request Submitted', 'Admin will review and confirm your resolution.');
+        setTimeout(() => location.reload(), 1500);
+      } catch (err) {
+        Toast.error('Failed', err.message);
+        btn.disabled = false;
+        btn.textContent = 'Submit Resolution Request';
+      }
+    };
+
+    const copyLink = () => {
+      navigator.clipboard.writeText(window.location.href).then(() => {
+        Toast.success('Copied!', 'Link copied to clipboard.');
+      });
+    };
+
+    const escapeHtml = (text) => {
+      if (!text) return '';
+      return text
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/\n/g, '<br>');
+    };
+
+    // ─── DISPUTE FUNCTIONS ─────────────────────────────────────────────────────
+    const openDisputeModal = () => {
+      if (!Auth.isLoggedIn()) {
+        openAuthModal('login');
+        return;
+      }
+      document.getElementById('dispute-modal').classList.add('open');
+    };
+
+    // Load disputes for this complaint
+    const loadDisputes = async () => {
+      try {
+        const data = await api(`/disputes/${complaintId}`);
+        renderDisputes(data.disputes || []);
+      } catch (err) {
+        console.error('Failed to load disputes:', err);
+        document.getElementById('disputes-container').innerHTML = '';
+      }
+    };
+
+    // Render disputes
+    const renderDisputes = (disputes) => {
+      const container = document.getElementById('disputes-container');
+
+      if (!disputes || disputes.length === 0) {
+        container.innerHTML = '';
+        return;
+      }
+
+      let html = `
+        <div class="detail-section" style="border-color: rgba(52,152,219,0.3); background: rgba(52,152,219,0.08);">
+          <div class="detail-section-title" style="color: #3498db;">
+            📝 Dispute Responses (${disputes.length})
+          </div>
+          <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 16px;">
+            These are verified responses from individuals mentioned in this complaint. Each has been reviewed and approved by our admin team.
+          </div>
+      `;
+
+      disputes.forEach((dispute, index) => {
+        const sanitizedArgument = DOMPurify.sanitize(dispute.argument);
+        const sanitizedReviewNotes = dispute.reviewNotes ? DOMPurify.sanitize(dispute.reviewNotes) : '';
+        html += `
+          <div style="background: var(--surface); border: 1px solid rgba(52,152,219,0.2); border-radius: var(--radius); padding: 16px; margin-bottom: 12px;">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
+              <div>
+                <div style="font-weight: 600; color: var(--text-primary); font-size: 14px;">Dispute Response #${index + 1}</div>
+                <div style="font-size: 12px; color: var(--text-muted);">
+                  Submitted: ${formatDate(dispute.createdAt)} | Verified: ${formatDate(dispute.reviewedAt)}
+                </div>
+              </div>
+              <div style="background: rgba(52,152,219,0.2); color: #3498db; padding: 4px 10px; border-radius: 4px; font-size: 11px; font-weight: 600;">
+                ✓ VERIFIED
+              </div>
+            </div>
+            
+            <div style="background: rgba(255,255,255,0.5); padding: 12px; border-radius: 6px; margin-bottom: 12px; border-left: 3px solid #3498db;">
+              <div style="font-size: 13px; color: var(--text-primary); line-height: 1.6;">
+                ${sanitizedArgument}
+              </div>
+            </div>
+
+            ${dispute.proofs && dispute.proofs.length > 0 ? `
+              <div>
+                <div style="font-size: 12px; font-weight: 600; color: var(--text-muted); margin-bottom: 8px;">
+                  Evidence Files (${dispute.proofs.length})
+                </div>
+                <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+                  ${dispute.proofs.map(proof => {
+          const sanitizedName = DOMPurify.sanitize(proof.originalName);
+          return proof.fileType === 'image'
+            ? `<div class="proof-item" onclick="window.open('${proof.url}', '_blank')" style="cursor: pointer;">
+                         <img src="${proof.url}" alt="${sanitizedName}" loading="lazy">
+                         <div class="proof-item-name">${sanitizedName}</div>
+                       </div>`
+            : `<div class="proof-item" onclick="window.open('${proof.url}', '_blank')" style="cursor: pointer;">
+                         <div class="proof-item-pdf">📄<span style="font-size:11px;color:var(--text-dim);">PDF</span></div>
+                         <div class="proof-item-name">${sanitizedName}</div>
+                       </div>`
+        }).join('')}
+                </div>
+              </div>
+            ` : ''}
+
+            ${sanitizedReviewNotes ? `
+              <div style="margin-top: 12px; padding: 10px; background: rgba(245,166,35,0.1); border-left: 3px solid var(--accent2); border-radius: 4px;">
+                <div style="font-size: 11px; font-weight: 600; color: var(--accent2); margin-bottom: 4px;">Admin Note</div>
+                <div style="font-size: 12px; color: var(--text-muted);">${sanitizedReviewNotes}</div>
+              </div>
+            ` : ''}
+          </div>
+        `;
+      });
+
+      html += `</div>`;
+      container.innerHTML = DOMPurify.sanitize(html);
+    };
+
+    // Submit a dispute
+    const submitDispute = async () => {
+      const argument = document.getElementById('dispute-argument').value.trim();
+      const files = document.getElementById('dispute-proof-files').files;
+      const btn = document.getElementById('dispute-submit-btn');
+
+      if (!argument || argument.length < 50) {
+        Toast.error('Argument too short', 'Minimum 50 characters required.');
+        return;
+      }
+
+      if (files.length === 0) {
+        Toast.error('No proof files', 'Upload at least one image or PDF.');
+        return;
+      }
+
+      btn.disabled = true;
+      btn.textContent = 'Submitting...';
+
+      try {
+        const formData = new FormData();
+        formData.append('argument', argument);
+
+        for (let i = 0; i < files.length; i++) {
+          formData.append('proofs', files[i]);
+        }
+
+        const token = Auth.getToken();
+        const res = await fetch(`${API_BASE}/disputes/${complaintId}/submit`, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${token}` },
+          body: formData
+        });
+        const data = await res.json();
+
+        if (!res.ok) throw new Error(data.message);
+
+        document.getElementById('dispute-modal').classList.remove('open');
+
+        // Reset form
+        document.getElementById('dispute-argument').value = '';
+        document.getElementById('dispute-proof-files').value = '';
+        document.getElementById('dispute-files-preview').innerHTML = '';
+        document.getElementById('dispute-char-count').textContent = '0';
+
+        Toast.success('Dispute Submitted!', 'Your response has been submitted for admin review. You\'ll be notified once it\'s verified.');
+
+        // Reload disputes after a short delay
+        setTimeout(loadDisputes, 1500);
+      } catch (err) {
+        Toast.error('Submission Failed', err.message);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = '🔐 Submit Dispute for Admin Review';
+      }
+    };
+
+    // Character count for dispute argument
+    document.addEventListener('DOMContentLoaded', () => {
+      const argumentInput = document.getElementById('dispute-argument');
+      if (argumentInput) {
+        argumentInput.addEventListener('input', (e) => {
+          document.getElementById('dispute-char-count').textContent = e.target.value.length;
+        });
+      }
+
+      // File preview for disputes
+      const fileInput = document.getElementById('dispute-proof-files');
+      if (fileInput) {
+        fileInput.addEventListener('change', (e) => {
+          const preview = document.getElementById('dispute-files-preview');
+          preview.innerHTML = '';
+
+          for (let i = 0; i < e.target.files.length; i++) {
+            const file = e.target.files[i];
+            const filePreview = document.createElement('div');
+            filePreview.className = 'file-preview-item';
+            filePreview.style.display = 'flex';
+            filePreview.style.alignItems = 'center';
+            filePreview.style.gap = '8px';
+            filePreview.style.padding = '8px';
+            filePreview.style.background = 'var(--surface)';
+            filePreview.style.borderRadius = 'var(--radius)';
+
+            const icon = document.createElement('span');
+            icon.className = 'file-icon';
+            icon.textContent = file.type === 'application/pdf' ? '📄' : '🖼️';
+
+            const name = document.createElement('span');
+            name.className = 'file-name';
+            name.textContent = file.name;
+            name.style.fontSize = '12px';
+            name.style.overflow = 'hidden';
+            name.style.textOverflow = 'ellipsis';
+            name.style.flex = '1';
+
+            const size = document.createElement('span');
+            size.className = 'file-size';
+            size.textContent = formatFileSize(file.size);
+            size.style.fontSize = '11px';
+            size.style.color = 'var(--text-muted)';
+
+            filePreview.appendChild(icon);
+            filePreview.appendChild(name);
+            filePreview.appendChild(size);
+            preview.appendChild(filePreview);
+          }
+        });
+      }
+    });
+
+    // Close modal on overlay click
+    document.getElementById('resolution-modal').addEventListener('click', (e) => {
+      if (e.target === document.getElementById('resolution-modal')) {
+        document.getElementById('resolution-modal').classList.remove('open');
+      }
+    });
+
+    document.getElementById('dispute-modal').addEventListener('click', (e) => {
+      if (e.target === document.getElementById('dispute-modal')) {
+        document.getElementById('dispute-modal').classList.remove('open');
+      }
+    });
+  </script>
+</body>
+
+</html>

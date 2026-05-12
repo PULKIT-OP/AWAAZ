@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>My Complaints — AWAAZ</title>
+  <link rel="stylesheet" href="../assets/css/main.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
+</head>
+
+<body>
+
+  <header class="site-header" id="site-header"></header>
+
+  <main class="container" style="padding-top:40px; padding-bottom:60px; max-width:900px;">
+
+    <div style="margin-bottom:28px;">
+      <h1 style="font-family:var(--font-mono); font-size:24px; font-weight:700; color:var(--white); margin-bottom:6px;">
+        My Account
+      </h1>
+      <p style="color:var(--text-muted); font-size:14px;">
+        View your complaints and disputes filed on AWAAZ.
+      </p>
+    </div>
+
+    <!-- Tabs -->
+    <div style="display:flex; gap:12px; margin-bottom:24px; border-bottom:1px solid var(--border); flex-wrap:wrap;">
+      <button class="status-tab active" data-tab="complaints" onclick="switchTab('complaints', this)">
+        📋 My Complaints
+      </button>
+      <button class="status-tab" data-tab="disputes" onclick="switchTab('disputes', this)">
+        🔐 Disputes Registered
+      </button>
+    </div>
+
+    <div id="my-complaints-container">
+      <div class="skeleton-card" style="height:200px;">
+        <div class="skeleton" style="height:100%; width:100%;"></div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- Resolution Request Modal -->
+  <div class="modal-overlay" id="resolution-modal">
+    <div class="modal">
+      <button class="modal-close"
+        onclick="document.getElementById('resolution-modal').classList.remove('open')">×</button>
+      <div class="modal-title">Request Resolution</div>
+      <div class="modal-sub">Tell us how you got justice. Admin will verify and mark it resolved.</div>
+
+      <div class="form-group">
+        <label class="form-label">Explain how justice was served <span class="required">*</span></label>
+        <textarea class="form-textarea" id="res-note" rows="5"
+          placeholder="E.g.: FIR was filed by police, culprit was arrested, court gave judgment in my favor, etc."></textarea>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Upload Proof (optional)</label>
+        <div class="file-drop" onclick="document.getElementById('res-proof-file').click()">
+          <input type="file" id="res-proof-file" accept="image/*,.pdf" style="display:none">
+          <div class="file-drop-icon">📎</div>
+          <div class="file-drop-text">Court order, FIR, news article etc.</div>
+          <div class="file-drop-sub">Max 15MB</div>
+        </div>
+        <div id="res-file-preview" style="margin-top:8px;"></div>
+      </div>
+
+      <button class="btn btn-success btn-full" id="res-submit-btn" onclick="submitResolutionRequest()">
+        Submit for Review
+      </button>
+    </div>
+  </div>
+
+  <script src="../assets/js/utils.js"></script>
+  <script>
+    let activeResolutionComplaintId = null;
+    let currentTab = 'complaints';
+
+    const switchTab = (tab, elem) => {
+      currentTab = tab;
+      document.querySelectorAll('[data-tab]').forEach(btn => btn.classList.remove('active'));
+      elem.classList.add('active');
+
+      if (tab === 'complaints') {
+        loadMyComplaints();
+      } else {
+        loadMyDisputes();
+      }
+    };
+
+    document.addEventListener('DOMContentLoaded', () => {
+      renderHeader('my');
+
+      if (!Auth.isLoggedIn()) {
+        document.getElementById('my-complaints-container').innerHTML = `
+          <div class="warning-box">
+            <p><strong>You need to be logged in to view your complaints.</strong><br><br>
+              <button class="btn btn-primary" onclick="openAuthModal('login')">Log In</button>
+            </p>
+          </div>
+        `;
+        return;
+      }
+
+      // Check if tab parameter is passed
+      const params = new URLSearchParams(window.location.search);
+      const tabParam = params.get('tab');
+
+      if (tabParam === 'disputes') {
+        const disputeBtn = document.querySelector('[data-tab="disputes"]');
+        switchTab('disputes', disputeBtn);
+      } else {
+        loadMyComplaints();
+      }
+
+      document.getElementById('res-proof-file').addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        document.getElementById('res-file-preview').innerHTML = `
+          <div class="file-preview-item">
+            <span class="file-icon">${file.type === 'application/pdf' ? '📄' : '🖼️'}</span>
+            <span class="file-name">${file.name}</span>
+            <span class="file-size">${formatFileSize(file.size)}</span>
+          </div>
+        `;
+      });
+    });
+
+    const loadMyComplaints = async () => {
+      const container = document.getElementById('my-complaints-container');
+      try {
+        const data = await api('/complaints/user/my-complaints');
+        const complaints = data.complaints;
+
+        if (!complaints || complaints.length === 0) {
+          container.innerHTML = `
+            <div class="empty-state">
+              <div class="empty-state-icon">📭</div>
+              <h3>No complaints yet</h3>
+              <p>You haven't filed any complaints from this account.</p>
+              <br>
+              <a href="/pages/file-complaint.html" class="btn btn-primary">File Your First Complaint</a>
+            </div>
+          `;
+          return;
+        }
+
+        const user = Auth.getUser();
+
+        const tableHtml = `
+          <div style="background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-lg); overflow:hidden;">
+            <table class="my-complaints-table">
+              <thead>
+                <tr>
+                  <th>Complaint ID</th>
+                  <th>Culprit</th>
+                  <th>Type</th>
+                  <th>Status</th>
+                  <th>Views</th>
+                  <th>Filed</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${complaints.map(c => {
+          const culpritName = DOMPurify.sanitize(c.culpritDesignationOther || c.culpritDesignation.replace(/-/g, ' ').toUpperCase());
+          return `
+                  <tr>
+                    <td>
+                      <a href="/pages/complaint.html?id=${c.complaintId}" style="font-family:var(--font-mono); font-size:12px; color:var(--accent);">${c.complaintId}</a>
+                    </td>
+                    <td style="font-weight:600; color:var(--white); max-width:160px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${culpritName}">${culpritName}</td>
+                    <td>
+                      <div style="display:flex; gap:4px; flex-wrap:wrap;">
+                        ${(c.tags || []).slice(0, 2).map(t => `<span class="tag-pill ${t}" style="font-size:9px;">${tagLabel(t)}</span>`).join('')}
+                        ${(c.tags || []).length > 2 ? `<span class="tag-pill" style="font-size:9px;">+${c.tags.length - 2}</span>` : ''}
+                      </div>
+                    </td>
+                    <td><span class="status-badge ${c.status}">${c.status === 'resolved' ? '✅ RESOLVED' :
+              c.status === 'resolution-requested' ? '⏳ PENDING' : '🔴 ACTIVE'
+            }</span></td>
+                    <td style="font-family:var(--font-mono); font-size:12px; color:var(--text-dim);">👁 ${c.views || 0}</td>
+                    <td style="font-size:12px; color:var(--text-dim); white-space:nowrap;">${formatDate(c.createdAt)}</td>
+                    <td>
+                      ${c.status === 'active' ? `
+                        <button class="btn btn-secondary" style="padding:5px 12px; font-size:11px;" onclick="openResolutionModal('${c.complaintId}')">
+                          ✅ Got Justice?
+                        </button>
+                      ` : c.status === 'resolution-requested' ? `
+                        <span style="font-size:11px; color:var(--accent2); font-family:var(--font-mono);">Under Review</span>
+                      ` : `
+                        <span style="font-size:11px; color:var(--green); font-family:var(--font-mono);">Resolved ✓</span>
+                      `}
+                    </td>
+                  </tr>
+                `;
+        }).join('')}
+              </tbody>
+            </table>
+          </div>
+
+          <div style="margin-top:24px; text-align:center;">
+            <a href="/pages/file-complaint.html" class="btn btn-primary">+ File Another Complaint</a>
+          </div>
+        `;
+        container.innerHTML = DOMPurify.sanitize(tableHtml);
+      } catch (err) {
+        container.innerHTML = `
+          <div class="empty-state">
+            <div class="empty-state-icon">⚠️</div>
+            <h3>Failed to load</h3>
+            <p>${DOMPurify.sanitize(err.message)}</p>
+          </div>
+        `;
+      }
+    };
+
+    const openResolutionModal = (id) => {
+      activeResolutionComplaintId = id;
+      document.getElementById('res-note').value = '';
+      document.getElementById('res-file-preview').innerHTML = '';
+      document.getElementById('resolution-modal').classList.add('open');
+    };
+
+    const submitResolutionRequest = async () => {
+      const note = document.getElementById('res-note').value.trim();
+      const file = document.getElementById('res-proof-file').files[0];
+      const btn = document.getElementById('res-submit-btn');
+
+      if (!note || note.length < 20) {
+        Toast.error('Too short', 'Explain in at least 20 characters.');
+        return;
+      }
+
+      btn.disabled = true;
+      btn.textContent = 'Submitting...';
+
+      try {
+        const formData = new FormData();
+        formData.append('proofNote', note);
+        if (file) formData.append('resolutionProof', file);
+
+        const token = Auth.getToken();
+        const res = await fetch(`${API_BASE}/complaints/${activeResolutionComplaintId}/request-resolution`, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${token}` },
+          body: formData
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.message);
+
+        document.getElementById('resolution-modal').classList.remove('open');
+        Toast.success('Request Submitted!', 'Admin will review shortly.');
+        setTimeout(() => loadMyComplaints(), 1200);
+      } catch (err) {
+        Toast.error('Failed', err.message);
+        btn.disabled = false;
+        btn.textContent = 'Submit for Review';
+      }
+    };
+
+    document.getElementById('resolution-modal').addEventListener('click', (e) => {
+      if (e.target === document.getElementById('resolution-modal')) {
+        document.getElementById('resolution-modal').classList.remove('open');
+      }
+    });
+
+    // ─── DISPUTES TAB ──────────────────────────────────────────────────────
+    const loadMyDisputes = async () => {
+      const container = document.getElementById('my-complaints-container');
+      try {
+        const data = await api('/disputes/user/my-disputes');
+        const disputes = data.disputes;
+
+        if (!disputes || disputes.length === 0) {
+          container.innerHTML = `
+            <div class="empty-state">
+              <div class="empty-state-icon">⚖️</div>
+              <h3>No disputes yet</h3>
+              <p>You haven't filed any disputes. When you respond to a complaint against you, it will appear here.</p>
+              <br>
+              <a href="/pages/index.html" class="btn btn-primary">Browse Complaints</a>
+            </div>
+          `;
+          return;
+        }
+
+        const tableHtml = `
+          <div style="background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-lg); overflow:hidden;">
+            <table class="my-complaints-table">
+              <thead>
+                <tr>
+                  <th>Complaint ID</th>
+                  <th>Culprit</th>
+                  <th>Your Argument (Preview)</th>
+                  <th>Status</th>
+                  <th>Proof Files</th>
+                  <th>Submitted</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${disputes.map(d => {
+          const complaintId = d.complaint?.complaintId || 'N/A';
+          const culpritName = DOMPurify.sanitize(d.complaint?.culpritDesignationOther || d.complaint?.culpritDesignation?.replace(/-/g, ' ').toUpperCase() || 'Unknown');
+          const argumentPreview = DOMPurify.sanitize(d.argument.substring(0, 60));
+          return `
+                  <tr>
+                    <td>
+                      <a href="/pages/complaint.html?id=${complaintId}" style="font-family:var(--font-mono); font-size:12px; color:var(--accent);">${complaintId}</a>
+                    </td>
+                    <td style="font-weight:600; color:var(--white); max-width:140px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${culpritName}">${culpritName}</td>
+                    <td style="font-size:12px; color:var(--text-muted); max-width:180px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${argumentPreview}...</td>
+                    <td>
+                      ${d.status === 'verified' ? `
+                        <span style="display:inline-block; background:rgba(46,204,113,0.2); color:var(--green); padding:4px 8px; border-radius:4px; font-size:11px; font-weight:600;">✓ PUBLISHED</span>
+                      ` : d.status === 'pending' ? `
+                        <span style="display:inline-block; background:rgba(245,166,35,0.2); color:var(--accent2); padding:4px 8px; border-radius:4px; font-size:11px; font-weight:600;">⏳ PENDING</span>
+                      ` : `
+                        <span style="display:inline-block; background:rgba(255,60,47,0.2); color:var(--accent); padding:4px 8px; border-radius:4px; font-size:11px; font-weight:600;">✗ REJECTED</span>
+                      `}
+                    </td>
+                    <td style="font-size:12px; color:var(--text-muted);">${d.proofs?.length || 0} file${d.proofs?.length !== 1 ? 's' : ''}</td>
+                    <td style="font-size:12px; color:var(--text-dim); white-space:nowrap;">${formatDate(d.createdAt)}</td>
+                    <td>
+                      ${d.complaint ? `
+                        <a href="/pages/complaint.html?id=${complaintId}&from=disputes" class="btn btn-secondary" style="padding:5px 10px; font-size:11px;">
+                          View Complaint
+                        </a>
+                      ` : `
+                        <span style="color:var(--text-muted); font-size:11px;">Complaint deleted</span>
+                      `}
+                      ${d.status === 'rejected' && d.reviewNotes ? `
+                        <button class="btn btn-secondary" style="padding:5px 10px; font-size:11px; color:var(--accent); border-color:var(--accent); margin-top:4px;" onclick="showRejectionReason('${d._id}')">
+                          ℹ️ Reason
+                        </button>
+                      ` : ''}
+                    </td>
+                  </tr>
+                `;
+        }).join('')}
+              </tbody>
+            </table>
+          </div>
+
+          <div style="margin-top:24px; text-align:center; font-size:13px; color:var(--text-muted);">
+            <p>💡 <strong>Tip:</strong> When your dispute is <strong style="color:var(--green);">Published (Verified)</strong>, it will be visible to everyone on the complaint page.</p>
+            <p style="margin-top:8px;">⏳ <strong>Pending</strong> disputes are under admin review.</p>
+            <p style="margin-top:8px;">✗ <strong>Rejected</strong> disputes were not approved by admin.</p>
+          </div>
+        `;
+        container.innerHTML = DOMPurify.sanitize(tableHtml);
+      } catch (err) {
+        container.innerHTML = `
+          <div class="empty-state">
+            <div class="empty-state-icon">⚠️</div>
+            <h3>Failed to load</h3>
+            <p>${DOMPurify.sanitize(err.message)}</p>
+          </div>
+        `;
+      }
+    };
+
+    const showRejectionReason = (disputeId) => {
+      // This would need dispute data - for now show a placeholder
+      Toast.warning('Rejection Reason', 'Dispute did not meet verification criteria.');
+    };
+  </script>
+</body>
+
+</html>

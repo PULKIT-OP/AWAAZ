@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin Panel — AWAAZ</title>
+  <link rel="stylesheet" href="../assets/css/main.css">
+</head>
+
+<body>
+
+  <header class="site-header" id="site-header"></header>
+
+  <main class="container" style="padding-top:40px; padding-bottom:60px; max-width:1000px;">
+
+    <div id="admin-container">
+      <!-- Login check handled by JS -->
+    </div>
+
+  </main>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
+  <script src="../assets/js/utils.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      renderHeader('admin');
+
+      // If user has valid JWT token and isAdmin flag, attempt to load dashboard
+      // Backend will verify JWT — if invalid/expired, API calls will fail with 401/403
+      if (Auth.isLoggedIn() && Auth.isAdmin()) {
+        loadAdminDashboard();
+      } else {
+        showAdminLogin();
+      }
+    });
+
+    const showAdminLogin = () => {
+      document.getElementById('admin-container').innerHTML = `
+        <div style="max-width:400px; margin:0 auto;">
+          <div class="warning-box" style="margin-bottom:24px;">
+            <p><strong>Admin Access Only.</strong><br>Enter your admin credentials to continue.</p>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">User ID</label>
+            <input class="form-input" id="a-uid" type="text" placeholder="Your User ID">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Password</label>
+            <div class="password-wrapper">
+              <input class="form-input" id="a-pw" type="password" placeholder="Your Password">
+              <button type="button" class="password-toggle-btn" onclick="togglePasswordVisibility(this)" aria-label="Show password">👁️‍🗨️</button>
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Admin Secret Key</label>
+            <input class="form-input" id="a-secret" type="password" placeholder="Admin secret password">
+          </div>
+          <button class="btn btn-primary btn-full" onclick="adminLogin()">Access Admin Panel</button>
+        </div>
+      `;
+    };
+
+    const adminLogin = async () => {
+      const userId = document.getElementById('a-uid').value.trim();
+      const password = document.getElementById('a-pw').value;
+      const adminPassword = document.getElementById('a-secret').value;
+
+      try {
+        const data = await api('/auth/admin-login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId, password, adminPassword })
+        });
+        Auth.save(data.token, data.user);
+        Toast.success('Admin access granted', '');
+        setTimeout(() => loadAdminDashboard(), 500);
+      } catch (err) {
+        Toast.error('Access denied', err.message);
+      }
+    };
+
+    const loadAdminDashboard = async () => {
+      const container = document.getElementById('admin-container');
+
+      container.innerHTML = `
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:28px; flex-wrap:wrap; gap:12px;">
+          <div>
+            <h1 style="font-family:var(--font-mono); font-size:22px; font-weight:700; color:var(--white); margin-bottom:4px;">Admin Panel</h1>
+            <p style="color:var(--text-muted); font-size:13px;">Logged in as: <span style="color:var(--accent);">${Auth.getUser()?.userId}</span></p>
+          </div>
+          <div style="display:flex; gap:8px;">
+            <button class="btn btn-secondary" onclick="loadAdminDashboard()" style="font-size:12px; padding:8px 14px;">🔄 Refresh</button>
+            <button class="btn btn-secondary" onclick="adminLogout()" style="font-size:12px; padding:8px 14px; color:var(--accent); border-color:var(--accent);">🚪 Logout</button>
+          </div>
+        </div>
+
+        <!-- Stats -->
+        <div id="admin-stats" style="display:grid; grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); gap:14px; margin-bottom:28px;">
+          <div class="detail-section" style="text-align:center;">
+            <div style="font-family:var(--font-mono); font-size:30px; font-weight:700; color:var(--accent);" id="as-total">—</div>
+            <div style="font-size:12px; color:var(--text-muted); margin-top:4px;">Total Complaints</div>
+          </div>
+          <div class="detail-section" style="text-align:center;">
+            <div style="font-family:var(--font-mono); font-size:30px; font-weight:700; color:var(--accent2);" id="as-pending">—</div>
+            <div style="font-size:12px; color:var(--text-muted); margin-top:4px;">Pending Review</div>
+          </div>
+          <div class="detail-section" style="text-align:center;">
+            <div style="font-family:var(--font-mono); font-size:30px; font-weight:700; color:var(--green);" id="as-resolved">—</div>
+            <div style="font-size:12px; color:var(--text-muted); margin-top:4px;">Resolved</div>
+          </div>
+          <a href="/pages/admin-disputes.html" class="detail-section" style="text-align:center; background: rgba(52,152,219,0.08); border: 1px solid rgba(52,152,219,0.3); cursor: pointer; text-decoration: none; display: flex; flex-direction: column; align-items: center; justify-content: center;">
+            <div style="font-family:var(--font-mono); font-size:30px; font-weight:700; color:#3498db;" id="as-disputes">—</div>
+            <div style="font-size:12px; color:var(--text-muted); margin-top:4px;">Pending Disputes</div>
+          </a>
+        </div>
+
+        <!-- Pending resolutions -->
+        <div class="detail-section">
+          <div class="detail-section-title">Resolution Requests Pending Review</div>
+          <div id="pending-list">Loading...</div>
+        </div>
+
+        <!-- All complaints -->
+        <div class="detail-section" style="margin-top:20px;">
+          <div class="detail-section-title" style="margin-bottom:14px;">
+            All Complaints — Quick Actions
+          </div>
+
+          <!-- Filter Tabs -->
+          <div style="display:flex; gap:12px; margin-bottom:16px; border-bottom:1px solid var(--border); flex-wrap:wrap;">
+            <button class="status-tab active" data-filter="all" onclick="filterComplaints('all', this)">
+              📋 All Complaints (<span id="count-all">0</span>)
+            </button>
+            <button class="status-tab" data-filter="pending" onclick="filterComplaints('pending', this)">
+              ⏳ Pending Review (<span id="count-pending">0</span>)
+            </button>
+            <button class="status-tab" data-filter="resolved" onclick="filterComplaints('resolved', this)">
+              ✓ Resolved (<span id="count-resolved">0</span>)
+            </button>
+          </div>
+
+          <!-- Search Box -->
+          <div style="margin-bottom:16px;">
+            <input type="text" id="admin-search" placeholder="Search by ID or culprit name..." class="form-input" style="width:100%; max-width:400px; padding:8px 12px; font-size:13px;" oninput="filterAdminTable(this.value)">
+          </div>
+
+          <div id="all-complaints-list">Loading...</div>
+        </div>
+      `;
+
+      try {
+        const [statsData, pendingData, allData, disputesData] = await Promise.all([
+          api('/complaints/public/stats'),
+          api('/complaints/admin/pending-resolutions'),
+          api('/complaints?limit=50&sort=newest'),
+          api('/disputes/admin/pending?limit=100&status=pending')
+        ]);
+
+        document.getElementById('as-total').textContent = statsData.stats.total;
+        document.getElementById('as-pending').textContent = statsData.stats.pending;
+        document.getElementById('as-resolved').textContent = statsData.stats.resolved;
+        document.getElementById('as-disputes').textContent = disputesData.total || 0;
+
+        renderPendingList(pendingData.complaints);
+        renderAllList(allData.complaints);
+      } catch (err) {
+        // Check if JWT is invalid/expired (401) or user lacks admin permissions (403)
+        if (
+          err.message.includes('401') ||
+          err.message.includes('403') ||
+          err.message.toLowerCase().includes('not authenticated') ||
+          err.message.toLowerCase().includes('admin access')
+        ) {
+          Auth.logout();
+          showAdminLogin();
+        } else {
+          Toast.error('Failed to load', err.message);
+          document.getElementById('as-disputes').textContent = '0';
+        }
+      }
+    };
+
+    const renderPendingList = (complaints) => {
+      const el = document.getElementById('pending-list');
+      if (!complaints || complaints.length === 0) {
+        el.innerHTML = `<p style="color:var(--text-dim); font-size:13px;">No pending resolution requests.</p>`;
+        return;
+      }
+
+      const html = complaints.map(c => {
+        const sanitizedNote = c.resolutionRequest?.proofNote ? DOMPurify.sanitize(c.resolutionRequest.proofNote) : '';
+        const culpritName = c.culpritDesignationOther || c.culpritDesignation.replace(/-/g, ' ').toUpperCase();
+        return `
+        <div style="background:var(--surface2); border:1px solid rgba(245,166,35,0.3); border-radius:var(--radius); padding:16px; margin-bottom:12px;">
+          <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:10px;">
+            <div>
+              <div style="font-family:var(--font-mono); font-size:11px; color:var(--text-dim);">${c.complaintId}</div>
+              <div style="font-weight:600; color:var(--white); margin-top:3px;">${DOMPurify.sanitize(culpritName)}</div>
+              <div style="font-size:12px; color:var(--text-muted); margin-top:4px;">
+                Requested: ${timeAgo(c.resolutionRequest?.requestedAt)}
+              </div>
+            </div>
+            <div style="display:flex; gap:8px;">
+              <a href="/pages/complaint.html?id=${c.complaintId}" target="_blank" class="btn btn-secondary" style="padding:6px 12px; font-size:11px;">View Full</a>
+              <button class="btn btn-success" style="padding:6px 12px; font-size:11px;" onclick="adminResolve('${c.complaintId}')">✅ Resolve</button>
+              <button class="btn btn-secondary" style="padding:6px 12px; font-size:11px; border-color:var(--accent); color:var(--accent);" onclick="adminReject('${c.complaintId}')">❌ Reject</button>
+              <button class="btn btn-secondary" style="padding:6px 12px; font-size:11px; border-color:var(--accent); color:var(--accent);" onclick="adminDelete('${c.complaintId}')">🗑️ Delete</button>
+            </div>
+          </div>
+          ${sanitizedNote ? `
+            <div style="margin-top:12px; padding:10px; background:var(--surface); border-radius:var(--radius); font-size:13px; color:var(--text-muted);">
+              <strong style="color:var(--accent2);">Complainant says:</strong><br>
+              ${sanitizedNote}
+            </div>
+          ` : ''}
+        </div>
+      `;
+      }).join('');
+      el.innerHTML = DOMPurify.sanitize(html);
+    };
+
+    let allComplaintsData = [];
+    let currentComplaintFilter = 'all';
+
+    const renderAllList = (complaints) => {
+      allComplaintsData = complaints || [];
+      updateComplaintCounts();
+      renderFilteredTable(allComplaintsData);
+    };
+
+    const updateComplaintCounts = () => {
+      const allCount = allComplaintsData.length;
+      const pendingCount = allComplaintsData.filter(c => c.status === 'resolution-requested' || c.status === 'active').length;
+      const resolvedCount = allComplaintsData.filter(c => c.status === 'resolved').length;
+
+      document.getElementById('count-all').textContent = allCount;
+      document.getElementById('count-pending').textContent = pendingCount;
+      document.getElementById('count-resolved').textContent = resolvedCount;
+    };
+
+    const filterComplaints = (filter, elem) => {
+      currentComplaintFilter = filter;
+      document.querySelectorAll('[data-filter]').forEach(btn => btn.classList.remove('active'));
+      elem.classList.add('active');
+
+      let filtered = allComplaintsData;
+      if (filter === 'pending') {
+        filtered = allComplaintsData.filter(c => c.status === 'resolution-requested' || c.status === 'active');
+      } else if (filter === 'resolved') {
+        filtered = allComplaintsData.filter(c => c.status === 'resolved');
+      }
+
+      renderFilteredTable(filtered);
+    };
+
+    const filterAdminTable = (query) => {
+      if (!query) {
+        filterComplaints(currentComplaintFilter, document.querySelector(`[data-filter="${currentComplaintFilter}"]`));
+        return;
+      }
+      const q = query.toLowerCase();
+      let complaints = allComplaintsData;
+      if (currentComplaintFilter === 'pending') {
+        complaints = allComplaintsData.filter(c => c.status === 'resolution-requested' || c.status === 'active');
+      } else if (currentComplaintFilter === 'resolved') {
+        complaints = allComplaintsData.filter(c => c.status === 'resolved');
+      }
+
+      const filtered = complaints.filter(c => {
+        const designation = (c.culpritDesignationOther || c.culpritDesignation).toLowerCase();
+        return c.complaintId.toLowerCase().includes(q) || designation.includes(q);
+      });
+      renderFilteredTable(filtered);
+    };
+
+    const renderFilteredTable = (complaints) => {
+      const el = document.getElementById('all-complaints-list');
+      if (!complaints || complaints.length === 0) {
+        el.innerHTML = `<p style="color:var(--text-dim); font-size:13px;">No complaints found.</p>`;
+        return;
+      }
+      const tableHtml = `
+        <table class="my-complaints-table">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Culprit</th>
+              <th>Tags</th>
+              <th>Status</th>
+              <th>Views</th>
+              <th>Filed</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${complaints.map(c => {
+        const culpritName = DOMPurify.sanitize(c.culpritDesignationOther || c.culpritDesignation.replace(/-/g, ' ').toUpperCase());
+        const tags = (c.tags || []).slice(0, 2).map(t => DOMPurify.sanitize(t)).join(', ');
+        return `
+              <tr>
+                <td><a href="/pages/complaint.html?id=${c.complaintId}" target="_blank" style="font-family:var(--font-mono); font-size:11px; color:var(--accent);">${c.complaintId}</a></td>
+                <td style="color:var(--white); font-size:13px; max-width:140px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${culpritName}</td>
+                <td style="font-size:11px; color:var(--text-muted);">${tags}</td>
+                <td><span class="status-badge ${c.status}">${c.status.toUpperCase()}</span></td>
+                <td style="font-family:var(--font-mono); font-size:12px; color:var(--text-dim);">${c.views || 0}</td>
+                <td style="font-size:12px; color:var(--text-dim); white-space:nowrap;">${formatDate(c.createdAt)}</td>
+                <td>
+                  ${c.status !== 'resolved' ? `
+                    <button class="btn btn-secondary" style="padding:4px 10px; font-size:10px; color:var(--green); border-color:var(--green);" onclick="adminResolve('${c.complaintId}')">Resolve</button>
+                  ` : `<span style="font-size:11px; color:var(--green);">✓ Resolved</span>`}
+                  <button class="btn btn-secondary" style="padding:4px 10px; font-size:10px; color:var(--accent); border-color:var(--accent); margin-left:6px;" onclick="adminDelete('${c.complaintId}')">🗑️ Delete</button>
+                </td>
+              </tr>
+            `;
+      }).join('')}
+          </tbody>
+        </table>
+      `;
+      el.innerHTML = DOMPurify.sanitize(tableHtml);
+    };
+
+    const adminResolve = async (id) => {
+      const note = prompt('Resolution note (optional):') || 'Verified and resolved by admin.';
+      try {
+        await api(`/complaints/${id}/resolve`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ note })
+        });
+        Toast.success('Resolved', id);
+        setTimeout(() => loadAdminDashboard(), 800);
+      } catch (err) {
+        Toast.error('Failed', err.message);
+      }
+    };
+
+    const adminReject = async (id) => {
+      if (!confirm('Reject this resolution request?')) return;
+      try {
+        await api(`/complaints/${id}/reject-resolution`, { method: 'PATCH' });
+        Toast.success('Rejected', '');
+        setTimeout(() => loadAdminDashboard(), 800);
+      } catch (err) {
+        Toast.error('Failed', err.message);
+      }
+    };
+
+    const adminDelete = async (id) => {
+      if (!confirm('Are you SURE? This will permanently delete the complaint and all associated files (images, PDFs). This cannot be undone.')) return;
+      if (!confirm('Confirm deletion of complaint ' + id + '?')) return;
+
+      try {
+        await api(`/complaints/${id}`, { method: 'DELETE' });
+        Toast.success('Complaint deleted', id);
+        setTimeout(() => loadAdminDashboard(), 800);
+      } catch (err) {
+        Toast.error('Failed', err.message);
+      }
+    };
+
+    const adminLogout = () => {
+      // JWT token is cleared via Auth.logout() - real security comes from backend verification
+      Auth.logout();
+    };
+  </script>
+</body>
+
+</html>

@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AWAAZ — Public Voice Platform</title>
+  <meta name="description"
+    content="A public platform where anyone can file complaints against wrongdoers — harassment, fraud, corruption, and more. No login required to view.">
+  <link rel="stylesheet" href="../assets/css/main.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
+</head>
+
+<body>
+
+  <!-- HEADER -->
+  <header class="site-header" id="site-header"></header>
+
+  <!-- TICKER -->
+  <div class="ticker-bar">
+    <div class="ticker-label">LIVE</div>
+    <div class="ticker-track" id="ticker-track">
+      <span>⚖️ Every voice matters &nbsp;•&nbsp; Every complaint is a record &nbsp;•&nbsp; Anonymous. Public. Permanent.
+        &nbsp;•&nbsp; Justice may be delayed — but it will not be erased &nbsp;•&nbsp; आवाज़ उठाओ — Speak up
+        &nbsp;•&nbsp; Your truth, documented forever &nbsp;•&nbsp; Loading complaints...</span>
+      <span>⚖️ Every voice matters &nbsp;•&nbsp; Every complaint is a record &nbsp;•&nbsp; Anonymous. Public. Permanent.
+        &nbsp;•&nbsp; Justice may be delayed — but it will not be erased &nbsp;•&nbsp; आवाज़ उठाओ — Speak up
+        &nbsp;•&nbsp; Your truth, documented forever &nbsp;•&nbsp; Loading complaints...</span>
+    </div>
+  </div>
+
+  <!-- STATS BAR -->
+  <div class="stats-bar">
+    <div class="stats-inner">
+      <div class="stat-item">
+        <span class="stat-num" id="stat-total">—</span>
+        <span class="stat-label" id="label-total-complaints"></span>
+      </div>
+      <span class="stat-divider">|</span>
+      <div class="stat-item">
+        <span class="stat-num" id="stat-resolved">—</span>
+        <span class="stat-label" id="label-resolved"></span>
+      </div>
+      <span class="stat-divider">|</span>
+      <div class="stat-item">
+        <span class="stat-num" id="stat-pending">—</span>
+        <span class="stat-label" id="label-pending"></span>
+      </div>
+      <div style="margin-left:auto;">
+        <a href="/pages/file-complaint.html" class="btn btn-primary" style="padding:8px 18px; font-size:12px;">
+          ＋ &nbsp;<span id="label-file-complaint"></span>
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <!-- FILTER BAR -->
+  <div class="filter-bar">
+    <div class="filter-inner">
+      <span class="filter-label" id="label-filter"></span>
+
+      <button class="filter-chip active" data-tag="all" id="chip-all"></button>
+      <button class="filter-chip" data-tag="harassment" id="chip-harassment"></button>
+      <button class="filter-chip" data-tag="fraud" id="chip-fraud"></button>
+      <button class="filter-chip" data-tag="sexual-harassment" id="chip-sexual"></button>
+      <button class="filter-chip" data-tag="cybercrime" id="chip-cyber"></button>
+      <button class="filter-chip" data-tag="bribery-corruption" id="chip-corruption"></button>
+      <button class="filter-chip" data-tag="police-negligence" id="chip-police"></button>
+      <button class="filter-chip" data-tag="domestic-violence" id="chip-domestic"></button>
+      <button class="filter-chip" data-tag="other" id="chip-other"></button>
+
+      <div class="search-input-wrap">
+        <span>🔍</span>
+        <input type="text" id="search-input" placeholder="Search complaints..." />
+      </div>
+    </div>
+  </div>
+
+  <!-- MAIN CONTENT -->
+  <main class="container">
+    <div id="complaints-grid" class="complaints-grid">
+      <!-- Skeleton loading -->
+      ${Array(6).fill(0).map(() => `
+      <div class="skeleton-card">
+        <div class="skeleton" style="height:52px; width:80%; margin-bottom:12px;"></div>
+        <div class="skeleton" style="height:14px; width:60%; margin-bottom:8px;"></div>
+        <div class="skeleton" style="height:14px; width:90%; margin-bottom:8px;"></div>
+        <div class="skeleton" style="height:14px; width:75%;"></div>
+      </div>
+      `).join('')}
+    </div>
+
+    <div id="empty-state" class="empty-state hidden">
+      <div class="empty-state-icon">📭</div>
+      <h3 id="label-no-complaints"></h3>
+      <p id="label-try-different"></p>
+    </div>
+
+    <div id="pagination" class="pagination"></div>
+  </main>
+
+  <!-- FOOTER -->
+  <footer class="site-footer">
+    <div class="footer-inner">
+      <div>
+        <div class="footer-logo">AWAAZ<span>.</span></div>
+        <div class="footer-tagline">"Silence is not golden when injustice screams."</div>
+      </div>
+      <div class="footer-note">
+        AWAAZ enables anonymous sharing of real-world experiences to raise awareness. Content reflects personal
+        perspectives, is moderated, and not independently verified. We are independent of any government authority.
+      </div>
+    </div>
+  </footer>
+
+  <script src="../assets/js/utils.js"></script>
+  <script>
+    const updatePageLabels = () => {
+      document.getElementById("label-total-complaints").textContent = i18n("totalComplaints");
+      document.getElementById("label-resolved").textContent = i18n("resolved");
+      document.getElementById("label-pending").textContent = i18n("resolutionPending");
+      document.getElementById("label-file-complaint").textContent = i18n("fileAComplaint");
+      document.getElementById("label-filter").textContent = i18n("filter");
+      document.getElementById("chip-all").textContent = i18n("all");
+      document.getElementById("chip-harassment").textContent = i18nTag("harassment");
+      document.getElementById("chip-fraud").textContent = i18nTag("fraud");
+      document.getElementById("chip-sexual").textContent = i18nTag("sexual-harassment");
+      document.getElementById("chip-cyber").textContent = i18nTag("cybercrime");
+      document.getElementById("chip-corruption").textContent = i18nTag("bribery-corruption");
+      document.getElementById("chip-police").textContent = i18nTag("police-negligence");
+      document.getElementById("chip-domestic").textContent = i18nTag("domestic-violence");
+      document.getElementById("chip-other").textContent = i18nTag("other");
+      document.getElementById("label-no-complaints").textContent = i18n("noComplaintsFound");
+      document.getElementById("label-try-different").textContent = i18n("tryDifferent");
+      document.getElementById("search-input").placeholder = i18n("searchComplaints");
+    };
+
+    let currentPage = 1;
+    let currentTag = 'all';
+    let currentSearch = '';
+    let searchTimeout = null;
+    let tagCounts = {}; // Store tag counts
+
+    // Helper to update tag counts on filter chips
+    const updateTagCounts = (tagStats) => {
+      const total = tagStats.reduce((sum, item) => sum + item.count, 0);
+
+      // Create a map of tag -> count
+      const countMap = {};
+      tagStats.forEach(stat => {
+        countMap[stat._id] = stat.count;
+      });
+      tagCounts = countMap;
+
+      // Update filter chips with counts
+      const tagMap = {
+        'all': total,
+        'harassment': countMap['harassment'] || 0,
+        'fraud': countMap['fraud'] || 0,
+        'sexual-harassment': countMap['sexual-harassment'] || 0,
+        'cybercrime': countMap['cybercrime'] || 0,
+        'bribery-corruption': countMap['bribery-corruption'] || 0,
+        'police-negligence': countMap['police-negligence'] || 0,
+        'domestic-violence': countMap['domestic-violence'] || 0,
+        'other': countMap['other'] || 0
+      };
+
+      Object.entries(tagMap).forEach(([tag, count]) => {
+        const chipId = `chip-${tag === 'all' ? 'all' : tag.replace(/-/g, '-')}`;
+        const chip = document.getElementById(chipId);
+        if (chip) {
+          const labelText = chip.textContent.split('(')[0].trim(); // Remove existing count
+          chip.innerHTML = `${labelText} <span class="filter-chip-count">(${count})</span>`;
+        }
+      });
+    };
+
+    // Init
+    document.addEventListener('DOMContentLoaded', () => {
+      renderHeader('home');
+      updatePageLabels();
+      loadStats();
+      loadComplaints();
+
+      // Filter chips
+      document.querySelectorAll('.filter-chip').forEach(chip => {
+        chip.addEventListener('click', () => {
+          document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
+          chip.classList.add('active');
+          currentTag = chip.dataset.tag;
+          currentPage = 1;
+          loadComplaints();
+        });
+      });
+
+      // Search
+      document.getElementById('search-input').addEventListener('input', (e) => {
+        clearTimeout(searchTimeout);
+        searchTimeout = setTimeout(() => {
+          currentSearch = e.target.value.trim();
+          currentPage = 1;
+          loadComplaints();
+        }, 400);
+      });
+    });
+
+    const loadStats = async () => {
+      try {
+        const data = await api('/complaints/public/stats');
+        document.getElementById('stat-total').textContent = data.stats.total.toLocaleString('en-IN');
+        document.getElementById('stat-resolved').textContent = data.stats.resolved.toLocaleString('en-IN');
+        document.getElementById('stat-pending').textContent = data.stats.pending.toLocaleString('en-IN');
+
+        // Update tag counts on filter chips
+        if (data.stats.tagStats) {
+          updateTagCounts(data.stats.tagStats);
+        }
+      } catch (e) {
+        console.error('Stats error', e);
+      }
+    };
+
+    const loadComplaints = async () => {
+      const grid = document.getElementById('complaints-grid');
+      const emptyState = document.getElementById('empty-state');
+
+      // Skeleton
+      grid.innerHTML = Array(6).fill(0).map(() => `
+        <div class="skeleton-card">
+          <div class="skeleton" style="height:52px; width:80%; margin-bottom:12px;"></div>
+          <div class="skeleton" style="height:14px; width:60%; margin-bottom:8px;"></div>
+          <div class="skeleton" style="height:14px; width:90%; margin-bottom:8px;"></div>
+          <div class="skeleton" style="height:14px; width:75%;"></div>
+        </div>
+      `).join('');
+      emptyState.classList.add('hidden');
+
+      try {
+        const params = new URLSearchParams({
+          page: currentPage,
+          limit: 12,
+          sort: 'newest'
+        });
+        if (currentTag !== 'all') params.set('tag', currentTag);
+        if (currentSearch) params.set('search', currentSearch);
+
+        const data = await api(`/complaints?${params}`);
+
+        if (!data.complaints || data.complaints.length === 0) {
+          grid.innerHTML = '';
+          emptyState.classList.remove('hidden');
+          document.getElementById('pagination').innerHTML = '';
+          return;
+        }
+
+        grid.innerHTML = data.complaints.map(renderCard).join('');
+        renderPagination(data.page, data.pages);
+      } catch (e) {
+        grid.innerHTML = '';
+        Toast.error('Failed to load', 'Could not load complaints. Is the server running?');
+      }
+    };
+
+    const renderCard = (c) => {
+      const statusClass = c.status === 'resolved' ? 'resolved' : c.status === 'resolution-requested' ? 'resolution-requested' : '';
+      const statusLabel = c.status === 'resolved' ? 'RESOLVED' : c.status === 'resolution-requested' ? 'PENDING REVIEW' : 'ACTIVE';
+      const culpritName = DOMPurify.sanitize(c.culpritDesignationOther || c.culpritDesignation.replace(/-/g, ' ').toUpperCase());
+      const description = DOMPurify.sanitize(truncate(c.description, 160));
+      const city = c.location?.city ? DOMPurify.sanitize(c.location.city) : '';
+      const state = c.location?.state ? DOMPurify.sanitize(c.location.state) : '';
+      const tags = (c.tags || []).map(tag => `<span class="tag-pill ${tag}">${tagLabel(tag)}</span>`).join('');
+
+      return `
+        <article class="complaint-card ${statusClass}" onclick="window.location.href='/pages/complaint.html?id=${c.complaintId}'">
+          <div class="card-header">
+            ${c.culpritImage
+          ? `<img class="culprit-img" src="${c.culpritImage.url}" alt="Culprit" loading="lazy">`
+          : `<div class="culprit-img-placeholder">👤</div>`
+        }
+            <div class="card-meta">
+              <div class="card-id">${c.complaintId}</div>
+              <div class="culprit-name" title="${culpritName}">${culpritName}</div>
+              <div class="card-date">${timeAgo(c.createdAt)}</div>
+            </div>
+            <span class="status-badge ${c.status}">${statusLabel}</span>
+          </div>
+
+          <div class="card-tags">
+            ${tags}
+          </div>
+
+          <div class="card-excerpt">
+            <p>${description}</p>
+          </div>
+
+          <div class="card-footer">
+            <div class="card-stats">
+              <span class="card-stat">👁 ${c.views || 0}</span>
+              ${city ? `<span class="card-stat">📍 ${city}${state ? ', ' + state : ''}</span>` : ''}
+            </div>
+            <span class="proof-count">📎 ${(c.proofs || []).length} proof${(c.proofs || []).length !== 1 ? 's' : ''}</span>
+          </div>
+        </article>
+      `;
+    };
+
+    const renderPagination = (current, total) => {
+      const pag = document.getElementById('pagination');
+      if (total <= 1) { pag.innerHTML = ''; return; }
+
+      let html = `<button class="page-btn" onclick="goPage(${current - 1})" ${current === 1 ? 'disabled' : ''}>←</button>`;
+      for (let i = 1; i <= total; i++) {
+        if (i === 1 || i === total || Math.abs(i - current) <= 2) {
+          html += `<button class="page-btn ${i === current ? 'active' : ''}" onclick="goPage(${i})">${i}</button>`;
+        } else if (Math.abs(i - current) === 3) {
+          html += `<span style="color:var(--text-dim); padding:0 4px;">…</span>`;
+        }
+      }
+      html += `<button class="page-btn" onclick="goPage(${current + 1})" ${current === total ? 'disabled' : ''}>→</button>`;
+      pag.innerHTML = html;
+    };
+
+    const goPage = (page) => {
+      currentPage = page;
+      loadComplaints();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    };
+  </script>
+</body>
+
+</html>
