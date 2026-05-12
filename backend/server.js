@@ -11,6 +11,9 @@ const disputeRoutes = require("./routes/disputes");
 
 const app = express();
 
+// ─── TRUST PROXY (for Render & cloud platforms) ──────────────────────────────
+app.set("trust proxy", 1);
+
 // ─── CORS ────────────────────────────────────────────────────────────────────
 app.use(
   cors({
