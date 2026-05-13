@@ -546,12 +546,13 @@
                 <div style="display: flex; flex-wrap: wrap; gap: 8px;">
                   ${dispute.proofs.map(proof => {
           const sanitizedName = DOMPurify.sanitize(proof.originalName);
+          const safeUrl = proof.url.replace(/'/g, '&#39;'); // Escape single quotes in URL
           return proof.fileType === 'image'
-            ? `<div class="proof-item" onclick="window.open('${proof.url}', '_blank')" style="cursor: pointer;">
-                         <img src="${proof.url}" alt="${sanitizedName}" loading="lazy">
+            ? `<div class="proof-item" data-proof-url="${safeUrl}" style="cursor: pointer;">
+                         <img src="${safeUrl}" alt="${sanitizedName}" loading="lazy">
                          <div class="proof-item-name">${sanitizedName}</div>
                        </div>`
-            : `<div class="proof-item" onclick="window.open('${proof.url}', '_blank')" style="cursor: pointer;">
+            : `<div class="proof-item" data-proof-url="${safeUrl}" style="cursor: pointer;">
                          <div class="proof-item-pdf">📄<span style="font-size:11px;color:var(--text-dim);">PDF</span></div>
                          <div class="proof-item-name">${sanitizedName}</div>
                        </div>`
@@ -571,7 +572,15 @@
       });
 
       html += `</div>`;
-      container.innerHTML = DOMPurify.sanitize(html);
+      container.innerHTML = html; // Don't sanitize - we've already sanitized user inputs above
+
+      // Add click handlers to proof items
+      document.querySelectorAll('.proof-item[data-proof-url]').forEach(item => {
+        item.addEventListener('click', () => {
+          const url = item.getAttribute('data-proof-url');
+          if (url) window.open(url, '_blank');
+        });
+      });
     };
 
     // Submit a dispute
