@@ -293,7 +293,7 @@ router.get("/:complaintId", async (req, res) => {
       complaintId,
       status: "verified",
     })
-      .select("-submittedBy") // Don't expose submitter identity
+      .select("argument proofs status createdAt reviewedAt reviewNotes") // Explicitly include proofs and exclude submittedBy
       .sort({ createdAt: -1 });
 
     res.json({
