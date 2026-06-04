@@ -49,7 +49,7 @@ A public complaint platform where anyone can file anonymous complaints against w
 - HTML5, CSS3, Vanilla JavaScript
 - Responsive Design
 - No build tools required
-- Made with the help of Claude opus 4.6
+- Made with the help of Claude Sonnet 4.6
 
 ---
 
