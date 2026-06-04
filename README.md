@@ -42,12 +42,14 @@ A public complaint platform where anyone can file anonymous complaints against w
 - Cloudinary (Image Storage)
 - Multer (File Uploads)
 - BCrypt (Password Hashing)
+- Help from github copilot 
 
 **Frontend:**
 
 - HTML5, CSS3, Vanilla JavaScript
 - Responsive Design
 - No build tools required
+- Made with the help of Claude opus 4.6
 
 ---
 
